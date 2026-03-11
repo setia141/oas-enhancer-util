@@ -1,10 +1,20 @@
+'use client'
+
 import { useState } from 'react'
+import type { Iteration, ReviewData } from '../types'
 
 const MAX_ITERATIONS = 5
 const SUGGESTIONS_PREVIEW = 3
 const CHANGES_PREVIEW = 4
 
-function CollapsibleList({ items, preview, color, moreColor }) {
+interface CollapsibleListProps {
+  items: string[]
+  preview: number
+  color: string
+  moreColor: string
+}
+
+function CollapsibleList({ items, preview, color, moreColor }: CollapsibleListProps) {
   const [expanded, setExpanded] = useState(false)
   const visible = expanded ? items : items.slice(0, preview)
   const hidden = items.length - preview
@@ -26,13 +36,19 @@ function CollapsibleList({ items, preview, color, moreColor }) {
   )
 }
 
-function IterationRow({ num, status, review, changes }) {
+interface IterationRowProps {
+  num: number
+  status: 'pending' | 'active' | 'done' | 'skipped'
+  review?: ReviewData
+  changes?: string[]
+}
+
+function IterationRow({ num, status, review, changes }: IterationRowProps) {
   const colors = { pending: '#ccc', active: '#4285f4', done: '#34a853', skipped: '#34a853' }
-  const color = colors[status] || '#ccc'
+  const color = colors[status]
 
   return (
     <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-      {/* Step indicator */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
         <div style={{
           width: 32, height: 32, borderRadius: '50%',
@@ -49,27 +65,19 @@ function IterationRow({ num, status, review, changes }) {
         )}
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, paddingBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, color: status === 'pending' ? '#999' : '#1a1a1a', marginBottom: 4 }}>
           Iteration {num}
           {status === 'active' && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: '#4285f4', fontWeight: 400 }}>
-              ● running...
-            </span>
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#4285f4', fontWeight: 400 }}>● running...</span>
           )}
           {status === 'skipped' && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: '#34a853', fontWeight: 400 }}>
-              ✓ reviewer satisfied — done early
-            </span>
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#34a853', fontWeight: 400 }}>✓ reviewer satisfied — done early</span>
           )}
         </div>
 
         {review && (
-          <div style={{
-            background: '#f8f9fa', borderRadius: 8, padding: '10px 14px',
-            border: '1px solid #e8eaed', marginBottom: 8,
-          }}>
+          <div style={{ background: '#f8f9fa', borderRadius: 8, padding: '10px 14px', border: '1px solid #e8eaed', marginBottom: 8 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Reviewer
             </div>
@@ -77,30 +85,17 @@ function IterationRow({ num, status, review, changes }) {
               {review.summary}
             </div>
             {review.suggestions?.length > 0 && (
-              <CollapsibleList
-                items={review.suggestions}
-                preview={SUGGESTIONS_PREVIEW}
-                color="#555"
-                moreColor="#4285f4"
-              />
+              <CollapsibleList items={review.suggestions} preview={SUGGESTIONS_PREVIEW} color="#555" moreColor="#4285f4" />
             )}
           </div>
         )}
 
-        {changes?.length > 0 && (
-          <div style={{
-            background: '#e6f4ea', borderRadius: 8, padding: '10px 14px',
-            border: '1px solid #c3e6cb',
-          }}>
+        {changes && changes.length > 0 && (
+          <div style={{ background: '#e6f4ea', borderRadius: 8, padding: '10px 14px', border: '1px solid #c3e6cb' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#34a853', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Changes Applied
             </div>
-            <CollapsibleList
-              items={changes}
-              preview={CHANGES_PREVIEW}
-              color="#2d6a3f"
-              moreColor="#34a853"
-            />
+            <CollapsibleList items={changes} preview={CHANGES_PREVIEW} color="#2d6a3f" moreColor="#34a853" />
           </div>
         )}
       </div>
@@ -108,7 +103,13 @@ function IterationRow({ num, status, review, changes }) {
   )
 }
 
-export default function ProgressTracker({ currentIteration, iterations, reviewData, isComplete }) {
+interface ProgressTrackerProps {
+  currentIteration: number
+  iterations: Iteration[]
+  reviewData: Record<number, ReviewData>
+}
+
+export default function ProgressTracker({ currentIteration, iterations, reviewData }: ProgressTrackerProps) {
   const rows = Array.from({ length: MAX_ITERATIONS }, (_, i) => {
     const num = i + 1
     const iterData = iterations.find(it => it.iteration === num)
@@ -119,33 +120,20 @@ export default function ProgressTracker({ currentIteration, iterations, reviewDa
 
     return {
       num,
-      status: isSkipped ? 'skipped' : isDone ? 'done' : isActive ? 'active' : 'pending',
+      status: (isSkipped ? 'skipped' : isDone ? 'done' : isActive ? 'active' : 'pending') as IterationRowProps['status'],
       review: reviewForNum,
       changes: iterData?.changes_made,
     }
   })
 
   return (
-    <div style={{
-      width: '100%', maxWidth: 600,
-      background: '#fff', borderRadius: 16,
-      boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #4285f4, #34a853)',
-        padding: '20px 24px', color: '#fff',
-      }}>
+    <div style={{ width: '100%', maxWidth: 600, background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg, #4285f4, #34a853)', padding: '20px 24px', color: '#fff' }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>✨ Enhancing your OAS spec</div>
-        <div style={{ fontSize: 13, opacity: 0.9 }}>
-          AI review → enhance loop · up to {MAX_ITERATIONS} iterations
-        </div>
+        <div style={{ fontSize: 13, opacity: 0.9 }}>AI review → enhance loop · up to {MAX_ITERATIONS} iterations</div>
       </div>
-
       <div style={{ padding: '24px' }}>
-        {rows.map(row => (
-          <IterationRow key={row.num} {...row} />
-        ))}
+        {rows.map(row => <IterationRow key={row.num} {...row} />)}
       </div>
     </div>
   )

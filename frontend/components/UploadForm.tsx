@@ -1,10 +1,20 @@
+'use client'
+
 import { useRef, useState } from 'react'
 
-function FileDropZone({ label, accept, file, onFile, icon }) {
-  const inputRef = useRef(null)
+interface FileDropZoneProps {
+  label: string
+  accept: string
+  file: File | null
+  onFile: (f: File) => void
+  icon: string
+}
+
+function FileDropZone({ label, accept, file, onFile, icon }: FileDropZoneProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  function handleDrop(e) {
+  function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer.files[0]
@@ -13,16 +23,14 @@ function FileDropZone({ label, accept, file, onFile, icon }) {
 
   return (
     <div
-      onClick={() => inputRef.current.click()}
+      onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
       style={{
         border: `2px dashed ${dragging ? '#4285f4' : file ? '#34a853' : '#d0d5dd'}`,
-        borderRadius: 12,
-        padding: '24px 16px',
-        textAlign: 'center',
-        cursor: 'pointer',
+        borderRadius: 12, padding: '24px 16px',
+        textAlign: 'center', cursor: 'pointer',
         background: dragging ? '#e8f0fe' : file ? '#e6f4ea' : '#fafafa',
         transition: 'all 0.2s',
       }}
@@ -32,7 +40,7 @@ function FileDropZone({ label, accept, file, onFile, icon }) {
         type="file"
         accept={accept}
         style={{ display: 'none' }}
-        onChange={(e) => e.target.files[0] && onFile(e.target.files[0])}
+        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
       />
       <div style={{ fontSize: 28, marginBottom: 8 }}>{file ? '✅' : icon}</div>
       <div style={{ fontWeight: 600, fontSize: 14, color: '#333', marginBottom: 4 }}>{label}</div>
@@ -41,20 +49,22 @@ function FileDropZone({ label, accept, file, onFile, icon }) {
           {file.name} ({(file.size / 1024).toFixed(1)} KB)
         </div>
       ) : (
-        <div style={{ fontSize: 12, color: '#888' }}>
-          Drag & drop or click to browse
-        </div>
+        <div style={{ fontSize: 12, color: '#888' }}>Drag & drop or click to browse</div>
       )}
     </div>
   )
 }
 
-export default function UploadForm({ onSubmit, loading }) {
-  const [oasFile, setOasFile] = useState(null)
-  const [postmanFile, setPostmanFile] = useState(null)
+interface UploadFormProps {
+  onSubmit: (args: { oasFile: File; postmanFile: File | null; instructions: string }) => void
+}
+
+export default function UploadForm({ onSubmit }: UploadFormProps) {
+  const [oasFile, setOasFile] = useState<File | null>(null)
+  const [postmanFile, setPostmanFile] = useState<File | null>(null)
   const [instructions, setInstructions] = useState('')
 
-  function handleSubmit(e) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!oasFile) return
     onSubmit({ oasFile, postmanFile, instructions })
@@ -67,11 +77,7 @@ export default function UploadForm({ onSubmit, loading }) {
       boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
       overflow: 'hidden',
     }}>
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #4285f4, #34a853)',
-        padding: '28px 24px', color: '#fff',
-      }}>
+      <div style={{ background: 'linear-gradient(135deg, #4285f4, #34a853)', padding: '28px 24px', color: '#fff' }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
         <div style={{ fontSize: 20, fontWeight: 700 }}>OAS Enhancer</div>
         <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>
@@ -80,48 +86,30 @@ export default function UploadForm({ onSubmit, loading }) {
       </div>
 
       <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
-        {/* OAS File */}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 8 }}>
             OpenAPI Spec <span style={{ color: '#e53935' }}>*</span>
           </label>
-          <FileDropZone
-            label="OAS / Swagger file"
-            accept=".json,.yaml,.yml"
-            file={oasFile}
-            onFile={setOasFile}
-            icon="📋"
-          />
+          <FileDropZone label="OAS / Swagger file" accept=".json,.yaml,.yml" file={oasFile} onFile={setOasFile} icon="📋" />
           <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Accepts JSON, YAML (.yaml/.yml)</div>
         </div>
 
-        {/* Postman File */}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 8 }}>
             Postman Collection <span style={{ color: '#888', fontWeight: 400 }}>(optional)</span>
           </label>
-          <FileDropZone
-            label="Postman Collection v2.1"
-            accept=".json"
-            file={postmanFile}
-            onFile={setPostmanFile}
-            icon="📮"
-          />
+          <FileDropZone label="Postman Collection v2.1" accept=".json" file={postmanFile} onFile={setPostmanFile} icon="📮" />
           {postmanFile && (
             <button
               type="button"
               onClick={() => setPostmanFile(null)}
-              style={{
-                marginTop: 6, fontSize: 11, color: '#888',
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-              }}
+              style={{ marginTop: 6, fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               ✕ Remove
             </button>
           )}
         </div>
 
-        {/* Instructions */}
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 8 }}>
             Additional Instructions <span style={{ color: '#888', fontWeight: 400 }}>(optional)</span>
@@ -142,24 +130,16 @@ export default function UploadForm({ onSubmit, loading }) {
 
         <button
           type="submit"
-          disabled={!oasFile || loading}
+          disabled={!oasFile}
           style={{
             width: '100%', padding: '13px',
-            background: !oasFile || loading ? '#ccc' : '#4285f4',
+            background: !oasFile ? '#ccc' : '#4285f4',
             color: '#fff', border: 'none', borderRadius: 8,
             fontSize: 15, fontWeight: 600,
-            cursor: !oasFile || loading ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            cursor: !oasFile ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading ? (
-            <>
-              <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
-              Enhancing with AI...
-            </>
-          ) : (
-            '✨ Enhance OAS'
-          )}
+          ✨ Enhance OAS
         </button>
       </form>
     </div>
