@@ -213,3 +213,4 @@ backend/Include/
 backend/Lib/
 backend/Scripts/
 backend/tools/__pycache__/
+frontend/.next/

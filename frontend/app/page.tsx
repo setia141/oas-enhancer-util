@@ -1,38 +1,33 @@
+'use client'
+
 import { useState } from 'react'
-import { useAuth } from './auth/useAuth'
-import AccessDenied from './components/AccessDenied'
-import UploadForm from './components/UploadForm'
-import ProgressTracker from './components/ProgressTracker'
-import ResultViewer from './components/ResultViewer'
+import { useSession, signOut } from 'next-auth/react'
+import UploadForm from '../components/UploadForm'
+import ProgressTracker from '../components/ProgressTracker'
+import ResultViewer from '../components/ResultViewer'
+import type { Phase, Iteration, ReviewData, EnhancementResult, SSEEvent } from '../types'
 
 function LoadingScreen() {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 16, color: '#666', minHeight: '100vh',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#666', minHeight: '100vh' }}>
       <div style={{ fontSize: 40 }}>📄</div>
       <div style={{ fontSize: 15 }}>Signing you in...</div>
     </div>
   )
 }
 
-export default function App() {
-  const { status, user, logout } = useAuth()
+export default function Home() {
+  const { data: session, status } = useSession()
 
-  // UI state machine: idle | running | done | error
-  const [phase, setPhase] = useState('idle')
+  const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState('')
   const [originalFilename, setOriginalFilename] = useState('')
-
-  // SSE progress state
   const [currentIteration, setCurrentIteration] = useState(0)
-  const [iterations, setIterations] = useState([])       // completed iteration data
-  const [reviewData, setReviewData] = useState({})       // iteration → review object
+  const [iterations, setIterations] = useState<Iteration[]>([])
+  const [reviewData, setReviewData] = useState<Record<number, ReviewData>>({})
+  const [result, setResult] = useState<EnhancementResult | null>(null)
 
-  // Final result
-  const [result, setResult] = useState(null)
+  if (status === 'loading') return <LoadingScreen />
 
   function resetAll() {
     setPhase('idle')
@@ -43,7 +38,11 @@ export default function App() {
     setResult(null)
   }
 
-  async function handleSubmit({ oasFile, postmanFile, instructions }) {
+  async function handleSubmit({ oasFile, postmanFile, instructions }: {
+    oasFile: File
+    postmanFile: File | null
+    instructions: string
+  }) {
     resetAll()
     setPhase('running')
     setOriginalFilename(oasFile.name)
@@ -57,10 +56,10 @@ export default function App() {
       const resp = await fetch('/enhance', { method: 'POST', body: formData })
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
-        throw new Error(err.detail || `Server error ${resp.status}`)
+        throw new Error((err as { detail?: string }).detail ?? `Server error ${resp.status}`)
       }
 
-      const reader = resp.body.getReader()
+      const reader = resp.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
 
@@ -70,16 +69,14 @@ export default function App() {
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() // keep incomplete last line
+        buffer = lines.pop() ?? ''
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
-          let event
+          let event: SSEEvent
           try { event = JSON.parse(line.slice(6)) } catch { continue }
 
-          if (event.type === 'error') {
-            throw new Error(event.message)
-          }
+          if (event.type === 'error') throw new Error(event.message)
 
           if (event.type === 'iteration_start') {
             setCurrentIteration(event.iteration)
@@ -93,32 +90,30 @@ export default function App() {
             setIterations(prev => [
               ...prev,
               {
-                iteration: event.iteration,
+                iteration:      event.iteration,
                 review_summary: reviewData[event.iteration]?.summary ?? '',
-                suggestions: reviewData[event.iteration]?.suggestions ?? [],
-                changes_made: event.data.changes_made ?? [],
+                suggestions:    reviewData[event.iteration]?.suggestions ?? [],
+                changes_made:   event.data.changes_made,
               },
             ])
           }
 
           if (event.type === 'done') {
-            setResult(event)
-            setIterations(event.iterations ?? [])
+            const { type: _, ...resultData } = event
+            setResult(resultData as EnhancementResult)
+            setIterations(event.iterations)
             setPhase('done')
           }
         }
       }
     } catch (e) {
-      setError(e.message)
+      setError((e as Error).message)
       setPhase('error')
     }
   }
 
-  // ── Auth gate ─────────────────────────────────────────────────
-  if (status === 'loading') return <LoadingScreen />
-  if (status === 'unauthorized') return <AccessDenied groupError={null} />
+  const user = session?.user
 
-  // ── App shell ─────────────────────────────────────────────────
   return (
     <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f2f5' }}>
 
@@ -143,23 +138,23 @@ export default function App() {
             <div style={{ fontSize: 11, color: '#888' }}>{user?.email}</div>
           </div>
         </div>
-        <button onClick={logout} style={{
-          padding: '6px 14px', fontSize: 12,
-          background: 'transparent', border: '1px solid #e0e0e0',
-          borderRadius: 6, cursor: 'pointer', color: '#666',
-          fontFamily: 'inherit', marginLeft: 8,
-        }}>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          style={{
+            padding: '6px 14px', fontSize: 12,
+            background: 'transparent', border: '1px solid #e0e0e0',
+            borderRadius: 6, cursor: 'pointer', color: '#666',
+            fontFamily: 'inherit', marginLeft: 8,
+          }}
+        >
           Sign out
         </button>
       </header>
 
       {/* Main */}
-      <main style={{
-        flex: 1, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', padding: '32px 16px',
-      }}>
+      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
         {phase === 'idle' && (
-          <UploadForm onSubmit={handleSubmit} loading={false} />
+          <UploadForm onSubmit={handleSubmit} />
         )}
 
         {phase === 'running' && (
@@ -167,7 +162,6 @@ export default function App() {
             currentIteration={currentIteration}
             iterations={iterations}
             reviewData={reviewData}
-            isComplete={false}
           />
         )}
 
@@ -175,7 +169,7 @@ export default function App() {
           <ResultViewer
             result={result}
             originalFilename={originalFilename}
-            userName={user?.name}
+            userName={user?.name ?? ''}
             onReset={resetAll}
           />
         )}
@@ -188,11 +182,14 @@ export default function App() {
             }}>
               ⚠ {error}
             </div>
-            <button onClick={resetAll} style={{
-              padding: '10px 20px', background: '#4285f4', color: '#fff',
-              border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
-              fontFamily: 'inherit',
-            }}>
+            <button
+              onClick={resetAll}
+              style={{
+                padding: '10px 20px', background: '#4285f4', color: '#fff',
+                border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
+                fontFamily: 'inherit',
+              }}
+            >
               Try Again
             </button>
           </div>
