@@ -1,0 +1,27 @@
+# Git
+.git/
+.gitignore
+
+# Python virtualenv inside backend/
+backend/Scripts/
+backend/Lib/
+backend/pyvenv.cfg
+backend/__pycache__/
+backend/**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Secrets — never bake into the image
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Frontend env files — values are passed as Docker build args instead
+frontend/.env
+frontend/.env.*
+
+# Misc
+README.md
+*.md
