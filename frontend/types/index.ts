@@ -48,6 +48,9 @@ export interface ReviewData {
 export type SSEEvent =
   | { type: 'iteration_start'; iteration: number }
   | { type: 'review_complete'; iteration: number; data: ReviewData }
+  | { type: 'enhance_start'; iteration: number }
   | { type: 'enhance_complete'; iteration: number; data: { changes_made: string[] } }
   | ({ type: 'done' } & EnhancementResult)
   | { type: 'error'; message: string }
+
+export type IterationStep = 'reviewing' | 'enhancing'

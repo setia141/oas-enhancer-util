@@ -3,7 +3,6 @@ import json
 import logging
 import warnings
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
@@ -14,18 +13,17 @@ import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
-from .loop_runner import init_runners, run_enhancement_loop  # noqa: E402
+from .loop_runner import init_client, run_enhancement_loop   # noqa: E402
 from .tools.oas_to_postman import oas_to_postman             # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_runners()
+    init_client()
     yield
 
 
@@ -116,19 +114,3 @@ async def convert_oas_to_postman(oas_file: UploadFile = File(...)):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-# ── Serve built React frontend (production / Docker only) ─────────────────
-_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
-
-if _frontend_dist.exists():
-    app.mount("/assets", StaticFiles(directory=_frontend_dist / "assets"), name="assets")
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
-        # Serve any file that exists in dist directly (favicons, etc.)
-        requested = _frontend_dist / full_path
-        if requested.is_file():
-            return FileResponse(requested)
-        # Fall back to index.html for SPA client-side routing
-        return FileResponse(_frontend_dist / "index.html")

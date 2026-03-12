@@ -214,3 +214,4 @@ backend/Lib/
 backend/Scripts/
 backend/tools/__pycache__/
 frontend/.next/
+frontend/.env.example

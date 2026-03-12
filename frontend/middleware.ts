@@ -1,2 +1,8 @@
-// Next.js requires middleware.ts at the project root — logic lives in utils/middleware.ts
-export { default, config } from './utils/middleware'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+// Auth disabled for local testing.
+// To re-enable: replace this with: export { default, config } from './utils/middleware'
+export function middleware(req: NextRequest) {
+  return NextResponse.next()
+}

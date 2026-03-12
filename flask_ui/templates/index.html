@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OAS Enhancer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── Header ── */
+    #app-header { background:#fff; border-bottom:1px solid #e8eaed; padding:0 24px; display:flex; align-items:center; height:56px; flex-shrink:0; }
+    #app-header .logo { font-size:20px; margin-right:10px; }
+    #app-header .title { font-weight:700; font-size:16px; }
+
+    /* ── Main ── */
+    #app-main { flex:1; display:flex; align-items:center; justify-content:center; padding:32px 16px; }
+
+    /* ── Upload Form ── */
+    .upload-card { width:100%; max-width:560px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
+    .card-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:28px 24px; color:#fff; }
+    .card-header .icon { font-size:32px; margin-bottom:8px; }
+    .card-header h1 { font-size:20px; font-weight:700; }
+    .card-header p { font-size:13px; opacity:.9; margin-top:4px; }
+    .card-body { padding:24px; }
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:8px; }
+    .field label .opt { font-weight:400; color:#888; }
+    .field label .req { color:#e53935; }
+    .field .hint { font-size:11px; color:#999; margin-top:4px; }
+    .dropzone { border:2px dashed #d0d5dd; border-radius:12px; padding:24px 16px; text-align:center; cursor:pointer; background:#fafafa; transition:all .2s; }
+    .dropzone:hover, .dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
+    .dropzone.has-file { border-color:#34a853; background:#e6f4ea; }
+    .dropzone .dz-icon { font-size:28px; margin-bottom:8px; }
+    .dropzone .dz-label { font-weight:600; font-size:14px; color:#333; margin-bottom:4px; }
+    .dropzone .dz-hint { font-size:12px; color:#888; }
+    .dropzone .dz-file { font-size:13px; color:#34a853; font-weight:500; }
+    .remove-btn { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
+    textarea { width:100%; padding:10px 14px; border:1px solid #e0e0e0; border-radius:8px; font-size:13px; font-family:inherit; resize:vertical; line-height:1.5; outline:none; }
+    .submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
+
+    /* ── Progress Tracker ── */
+    .progress-card { width:100%; max-width:600px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
+    .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
+    .progress-header h2 { font-weight:700; font-size:18px; margin-bottom:4px; }
+    .progress-header p { font-size:13px; opacity:.9; }
+    .progress-body { padding:24px; }
+    .iter-row { display:flex; gap:16px; margin-bottom:16px; }
+    .iter-dot-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+    .iter-dot { width:32px; height:32px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; transition:all .3s; }
+    .iter-dot.pending { background:#ccc; }
+    .iter-dot.active  { background:#4285f4; box-shadow:0 0 0 4px #4285f433; }
+    .iter-dot.done    { background:#34a853; }
+    .iter-line { width:2px; flex:1; min-height:24px; margin-top:4px; }
+    .iter-line.done { background:#34a853; }
+    .iter-line.pending { background:#e0e0e0; }
+    .iter-content { flex:1; padding-bottom:16px; }
+    .iter-title { font-weight:600; font-size:14px; color:#1a1a1a; margin-bottom:4px; }
+    .iter-title.pending { color:#999; }
+    .iter-status { margin-left:8px; font-size:12px; font-weight:400; }
+    .iter-status.reviewing { color:#4285f4; }
+    .iter-status.enhancing { color:#f4a234; }
+    .iter-status.satisfied { color:#34a853; }
+    .review-box { background:#f8f9fa; border-radius:8px; padding:10px 14px; border:1px solid #e8eaed; margin-bottom:8px; }
+    .review-box .box-label { font-size:11px; font-weight:700; color:#888; margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
+    .review-box .box-summary { font-size:13px; color:#333; margin-bottom:6px; }
+    .review-box ul { margin:0; padding-left:16px; }
+    .review-box li { font-size:12px; color:#555; margin-bottom:2px; }
+    .more-btn { font-size:12px; color:#4285f4; cursor:pointer; margin-top:2px; background:none; border:none; padding:0; font-family:inherit; }
+    .changes-box { background:#e6f4ea; border-radius:8px; padding:10px 14px; border:1px solid #c3e6cb; }
+    .changes-box .box-label { font-size:11px; font-weight:700; color:#34a853; margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
+    .changes-box ul { margin:0; padding-left:16px; }
+    .changes-box li { font-size:12px; color:#2d6a3f; margin-bottom:2px; }
+
+    /* ── Result Viewer ── */
+    .result-card { width:100%; max-width:1100px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
+    .result-header { padding:14px 20px; background:linear-gradient(135deg,#34a853,#4285f4); color:#fff; display:flex; align-items:center; gap:12px; flex-shrink:0; }
+    .result-header .rh-info { flex:1; }
+    .result-header h2 { font-weight:700; font-size:16px; }
+    .result-header p { font-size:12px; opacity:.9; margin-top:2px; }
+    .new-btn { padding:7px 14px; font-size:13px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4); border-radius:8px; color:#fff; cursor:pointer; font-family:inherit; }
+    .tab-bar { display:flex; align-items:center; border-bottom:1px solid #e8eaed; padding:0 16px; flex-shrink:0; }
+    .tab-btn { padding:10px 14px; font-size:13px; font-weight:400; color:#666; border:none; border-bottom:2px solid transparent; background:none; cursor:pointer; font-family:inherit; }
+    .tab-btn.active { font-weight:600; color:#4285f4; border-bottom-color:#4285f4; }
+    .tab-actions { margin-left:auto; display:flex; gap:8px; }
+    .action-btn { padding:6px 12px; font-size:12px; background:#fff; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; font-family:inherit; color:#444; }
+    .action-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
+    .action-btn.postman { color:#ff6c37; border-color:#ff6c37; }
+    .tab-content { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+
+    /* YAML tab */
+    #tab-yaml { margin:0; padding:16px 20px; font-size:12px; line-height:1.6; background:#1e1e2e; color:#cdd6f4; flex:1; overflow:auto; font-family:monospace; white-space:pre; }
+
+    /* Diff tab */
+    #tab-diff { display:flex; flex-direction:column; height:100%; }
+    .diff-toolbar { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #e8eaed; background:#fafafa; flex-shrink:0; }
+    .diff-badge { font-size:12px; padding:2px 10px; border-radius:10px; font-weight:600; }
+    .diff-badge.added { background:#e6f4ea; color:#34a853; }
+    .diff-badge.removed { background:#fce8e6; color:#ea4335; }
+    .diff-panels { display:flex; flex:1; overflow:hidden; }
+    .diff-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
+    .diff-panel-header { padding:10px 14px; background:#f8f9fa; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; flex-shrink:0; }
+    .diff-panel-body { overflow-y:auto; font-family:monospace; font-size:12px; line-height:20px; flex:1; }
+    .diff-line { display:flex; }
+    .diff-line.added   { background:#e6f4ea; border-left:3px solid #34a853; }
+    .diff-line.removed { background:#fce8e6; border-left:3px solid #ea4335; }
+    .diff-line.unchanged { border-left:3px solid transparent; }
+    .diff-num { min-width:40px; text-align:right; padding-right:8px; user-select:none; flex-shrink:0; padding-top:1px; padding-bottom:1px; }
+    .diff-line.added .diff-num { color:#a8d5b5; }
+    .diff-line.removed .diff-num { color:#f5bfba; }
+    .diff-line.unchanged .diff-num { color:#ccc; }
+    .diff-text { white-space:pre; overflow:hidden; text-overflow:ellipsis; padding:1px 8px 1px 0; }
+    .diff-line.added .diff-text { color:#1e6e35; }
+    .diff-line.removed .diff-text { color:#c5221f; }
+    .diff-line.unchanged .diff-text { color:#333; }
+    .diff-divider { width:1px; background:#e8eaed; flex-shrink:0; }
+
+    /* Summary tab */
+    #tab-summary { padding:16px 20px; overflow-y:auto; }
+    .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+    .stat-box { background:#f8f9fa; border:1px solid #e8eaed; border-radius:8px; padding:12px 14px; text-align:center; }
+    .stat-value { font-size:22px; font-weight:700; }
+    .stat-label { font-size:11px; color:#888; margin-top:2px; }
+    .iter-card { border:1px solid #e8eaed; border-radius:10px; overflow:hidden; margin-bottom:12px; }
+    .iter-card-header { width:100%; padding:12px 16px; display:flex; align-items:center; gap:8px; background:#f8f9fa; border:none; cursor:pointer; font-family:inherit; text-align:left; }
+    .iter-num-badge { width:28px; height:28px; border-radius:50%; background:#4285f4; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+    .iter-card-title { flex:1; }
+    .iter-card-title h4 { font-size:13px; font-weight:600; color:#1a1a1a; }
+    .iter-card-title p { font-size:12px; color:#666; margin-top:2px; }
+    .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; margin-left:8px; }
+    .badge-blue { background:#4285f422; color:#4285f4; }
+    .badge-green { background:#34a85322; color:#34a853; }
+    .iter-card-body { padding:16px; display:flex; gap:16px; }
+    .iter-col { flex:1; }
+    .iter-col-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+    .iter-col-label.blue { color:#4285f4; }
+    .iter-col-label.green { color:#34a853; }
+    .iter-col ul { margin:0; padding-left:16px; }
+    .iter-col li { font-size:13px; margin-bottom:6px; line-height:1.5; }
+    .iter-col li.suggestions { color:#444; }
+    .iter-col li.changes { color:#2d6a3f; }
+    .iter-col-empty { font-size:13px; color:#888; }
+    .iter-col-divider { width:1px; background:#e8eaed; }
+
+    /* Endpoints tab */
+    #tab-endpoints { padding:16px 20px; overflow-y:auto; }
+    .endpoint-row { display:flex; align-items:center; gap:10px; padding:9px 14px; border-radius:8px; margin-bottom:6px; background:#f8f9fa; border:1px solid #e8eaed; }
+    .method-badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; }
+    .endpoint-path { font-size:13px; font-family:monospace; flex:1; }
+    .endpoint-summary { font-size:12px; color:#888; }
+    .example-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+    .example-badge.has { background:#e6f4ea; color:#34a853; }
+    .example-badge.none { background:#fce8e6; color:#c5221f; }
+
+    /* Error */
+    .error-box { width:100%; max-width:560px; }
+    .error-msg { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
+    .retry-btn { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
+  </style>
+</head>
+<body>
+
+<header id="app-header">
+  <div class="logo">📄</div>
+  <div class="title">OAS Enhancer</div>
+</header>
+
+<main id="app-main">
+
+  <!-- ── IDLE: Upload Form ── -->
+  <div id="phase-idle" class="upload-card">
+    <div class="card-header">
+      <div class="icon">📄</div>
+      <h1>OAS Enhancer</h1>
+      <p>Upload your OpenAPI spec and optional Postman collection to auto-generate examples</p>
+    </div>
+    <div class="card-body">
+      <div class="field">
+        <label>OpenAPI Spec <span class="req">*</span></label>
+        <div id="dz-oas" class="dropzone" ondragover="dzDragOver(event,'dz-oas')" ondragleave="dzDragLeave('dz-oas')" ondrop="dzDrop(event,'dz-oas','oas')" onclick="document.getElementById('inp-oas').click()">
+          <div class="dz-icon">📋</div>
+          <div class="dz-label">OAS / Swagger file</div>
+          <div class="dz-hint">Drag &amp; drop or click to browse</div>
+        </div>
+        <input type="file" id="inp-oas" accept=".json,.yaml,.yml" style="display:none" onchange="dzFile(event,'dz-oas','oas')">
+        <div class="hint">Accepts JSON, YAML (.yaml/.yml)</div>
+      </div>
+
+      <div class="field">
+        <label>Postman Collection <span class="opt">(optional)</span></label>
+        <div id="dz-postman" class="dropzone" ondragover="dzDragOver(event,'dz-postman')" ondragleave="dzDragLeave('dz-postman')" ondrop="dzDrop(event,'dz-postman','postman')" onclick="document.getElementById('inp-postman').click()">
+          <div class="dz-icon">📮</div>
+          <div class="dz-label">Postman Collection v2.1</div>
+          <div class="dz-hint">Drag &amp; drop or click to browse</div>
+        </div>
+        <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
+        <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
+      </div>
+
+      <div class="field">
+        <label>Additional Instructions <span class="opt">(optional)</span></label>
+        <textarea id="instructions" rows="3" placeholder="e.g. Focus on POST endpoints, add error response examples, use realistic data..."></textarea>
+      </div>
+
+      <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Enhance OAS</button>
+    </div>
+  </div>
+
+  <!-- ── RUNNING: Progress Tracker ── -->
+  <div id="phase-running" class="progress-card" style="display:none">
+    <div class="progress-header">
+      <h2>✨ Enhancing your OAS spec</h2>
+      <p>AI review → enhance loop · up to 5 iterations</p>
+    </div>
+    <div class="progress-body" id="progress-body"></div>
+  </div>
+
+  <!-- ── DONE: Result Viewer ── -->
+  <div id="phase-done" class="result-card" style="display:none">
+    <div class="result-header">
+      <div class="rh-info">
+        <h2>✅ Enhancement Complete</h2>
+        <p id="result-meta"></p>
+      </div>
+      <button class="new-btn" onclick="resetAll()">← New File</button>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn" data-tab="diff" onclick="switchTab('diff')">Diff View</button>
+      <button class="tab-btn" data-tab="yaml" onclick="switchTab('yaml')">Enhanced YAML</button>
+      <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">Change History</button>
+      <button class="tab-btn" data-tab="endpoints" onclick="switchTab('endpoints')">Endpoint Summary</button>
+      <div class="tab-actions">
+        <button class="action-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
+        <button class="action-btn primary" onclick="downloadYaml()">⬇ Download YAML</button>
+        <button class="action-btn postman" id="postman-btn" onclick="exportPostman()">📮 Postman</button>
+      </div>
+    </div>
+    <div class="tab-content">
+      <pre id="tab-yaml" style="display:none"></pre>
+      <div id="tab-diff" style="display:none"></div>
+      <div id="tab-summary" style="display:none"></div>
+      <div id="tab-endpoints" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ── ERROR ── -->
+  <div id="phase-error" class="error-box" style="display:none">
+    <div class="error-msg" id="error-msg"></div>
+    <button class="retry-btn" onclick="resetAll()">Try Again</button>
+  </div>
+
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let state = {
+  oasFile: null,
+  postmanFile: null,
+  originalFilename: '',
+  currentIteration: 0,
+  currentStep: 'reviewing',   // 'reviewing' | 'enhancing'
+  reviewData: {},             // { [iteration]: { satisfied, summary, suggestions } }
+  iterations: [],             // completed iteration objects
+  result: null,
+}
+
+const MAX_ITERATIONS = 5
+const SUGGESTIONS_PREVIEW = 3
+const CHANGES_PREVIEW = 4
+
+// ── Phase switching ────────────────────────────────────────────────
+function showPhase(name) {
+  ['idle','running','done','error'].forEach(p => {
+    document.getElementById('phase-' + p).style.display = p === name ? '' : 'none'
+  })
+}
+
+function resetAll() {
+  state = { oasFile:null, postmanFile:null, originalFilename:'', currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null }
+  document.getElementById('progress-body').innerHTML = ''
+  document.getElementById('inp-oas').value = ''
+  document.getElementById('inp-postman').value = ''
+  document.getElementById('instructions').value = ''
+  dzReset('dz-oas', '📋', 'OAS / Swagger file')
+  dzReset('dz-postman', '📮', 'Postman Collection v2.1')
+  document.getElementById('remove-postman').style.display = 'none'
+  document.getElementById('submit-btn').disabled = true
+  showPhase('idle')
+}
+
+// ── Drop zone ──────────────────────────────────────────────────────
+function dzDragOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag') }
+function dzDragLeave(id)   { document.getElementById(id).classList.remove('drag') }
+
+function dzDrop(e, id, key) {
+  e.preventDefault()
+  dzDragLeave(id)
+  const f = e.dataTransfer.files[0]
+  if (f) setFile(id, key, f)
+}
+
+function dzFile(e, id, key) {
+  const f = e.target.files[0]
+  if (f) setFile(id, key, f)
+}
+
+function setFile(id, key, file) {
+  if (key === 'oas') {
+    state.oasFile = file
+    document.getElementById('submit-btn').disabled = false
+  } else {
+    state.postmanFile = file
+    document.getElementById('remove-postman').style.display = ''
+  }
+  const dz = document.getElementById(id)
+  dz.classList.remove('drag')
+  dz.classList.add('has-file')
+  dz.querySelector('.dz-icon').textContent = '✅'
+  dz.querySelector('.dz-label').textContent = file.name
+  const hint = dz.querySelector('.dz-hint')
+  if (hint) hint.style.display = 'none'
+  let fileInfo = dz.querySelector('.dz-file')
+  if (!fileInfo) { fileInfo = document.createElement('div'); fileInfo.className = 'dz-file'; dz.appendChild(fileInfo) }
+  fileInfo.textContent = `${file.name} (${(file.size/1024).toFixed(1)} KB)`
+}
+
+function dzReset(id, icon, label) {
+  const dz = document.getElementById(id)
+  dz.classList.remove('has-file','drag')
+  dz.querySelector('.dz-icon').textContent = icon
+  dz.querySelector('.dz-label').textContent = label
+  const hint = dz.querySelector('.dz-hint')
+  if (hint) hint.style.display = ''
+  const fileInfo = dz.querySelector('.dz-file')
+  if (fileInfo) fileInfo.remove()
+}
+
+function removePostman() {
+  state.postmanFile = null
+  document.getElementById('inp-postman').value = ''
+  document.getElementById('remove-postman').style.display = 'none'
+  dzReset('dz-postman', '📮', 'Postman Collection v2.1')
+}
+
+// ── Submit ─────────────────────────────────────────────────────────
+async function handleSubmit() {
+  if (!state.oasFile) return
+  state.originalFilename = state.oasFile.name
+  state.currentIteration = 0
+  state.currentStep = 'reviewing'
+  state.reviewData = {}
+  state.iterations = []
+  state.result = null
+  renderProgress()
+  showPhase('running')
+
+  const form = new FormData()
+  form.append('oas_file', state.oasFile)
+  if (state.postmanFile) form.append('postman_file', state.postmanFile)
+  const instructions = document.getElementById('instructions').value.trim()
+  if (instructions) form.append('instructions', instructions)
+
+  try {
+    const resp = await fetch('/enhance', { method:'POST', body:form })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err.detail || `Server error ${resp.status}`)
+    }
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream:true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        let event
+        try { event = JSON.parse(line.slice(6)) } catch { continue }
+        handleEvent(event)
+      }
+    }
+  } catch(e) {
+    document.getElementById('error-msg').textContent = '⚠ ' + e.message
+    showPhase('error')
+  }
+}
+
+// ── SSE Event handler ──────────────────────────────────────────────
+function handleEvent(event) {
+  if (event.type === 'error') {
+    document.getElementById('error-msg').textContent = '⚠ ' + event.message
+    showPhase('error')
+    return
+  }
+  if (event.type === 'iteration_start') {
+    state.currentIteration = event.iteration
+    state.currentStep = 'reviewing'
+    renderProgress()
+  }
+  if (event.type === 'review_complete') {
+    state.reviewData[event.iteration] = event.data
+    renderProgress()
+  }
+  if (event.type === 'enhance_start') {
+    state.currentStep = 'enhancing'
+    renderProgress()
+  }
+  if (event.type === 'enhance_complete') {
+    const rd = state.reviewData[event.iteration] || {}
+    state.iterations.push({
+      iteration:      event.iteration,
+      review_summary: rd.summary || '',
+      suggestions:    rd.suggestions || [],
+      changes_made:   event.data.changes_made,
+    })
+    renderProgress()
+  }
+  if (event.type === 'done') {
+    state.result = event
+    state.iterations = event.iterations
+    renderProgress()
+    renderResult()
+    showPhase('done')
+    switchTab('diff')
+  }
+}
+
+// ── Progress Tracker ───────────────────────────────────────────────
+function renderProgress() {
+  const body = document.getElementById('progress-body')
+  body.innerHTML = ''
+
+  for (let num = 1; num <= MAX_ITERATIONS; num++) {
+    const iterData  = state.iterations.find(it => it.iteration === num)
+    const reviewFor = state.reviewData[num]
+    const isDone    = iterData !== undefined
+    const isActive  = !isDone && num === state.currentIteration
+    const isSkipped = reviewFor?.satisfied && num === state.currentIteration
+
+    let dotClass = 'pending', dotText = String(num)
+    if (isDone || isSkipped) { dotClass = 'done'; dotText = '✓' }
+    else if (isActive)       { dotClass = 'active' }
+
+    let statusHtml = ''
+    if (isSkipped) {
+      statusHtml = '<span class="iter-status satisfied">✓ reviewer satisfied — done early</span>'
+    } else if (isActive) {
+      if (state.currentStep === 'reviewing') {
+        statusHtml = '<span class="iter-status reviewing">● reviewing...</span>'
+      } else {
+        statusHtml = '<span class="iter-status enhancing">● enhancing spec...</span>'
+      }
+    }
+
+    let reviewHtml = ''
+    if (reviewFor) {
+      const suggs = reviewFor.suggestions || []
+      const preview = suggs.slice(0, SUGGESTIONS_PREVIEW)
+      let listHtml  = preview.map(s => `<li>${escHtml(s)}</li>`).join('')
+      listHtml += makeExpandBtn(suggs, SUGGESTIONS_PREVIEW)
+      reviewHtml = `
+        <div class="review-box">
+          <div class="box-label">Reviewer</div>
+          <div class="box-summary">${escHtml(reviewFor.summary)}</div>
+          ${suggs.length > 0 ? `<ul>${listHtml}</ul>` : ''}
+        </div>`
+    }
+
+    let changesHtml = ''
+    if (iterData && iterData.changes_made?.length > 0) {
+      const changes  = iterData.changes_made
+      const preview  = changes.slice(0, CHANGES_PREVIEW)
+      let listHtml   = preview.map(c => `<li>${escHtml(c)}</li>`).join('')
+      listHtml += makeExpandBtn(changes, CHANGES_PREVIEW)
+      changesHtml = `
+        <div class="changes-box">
+          <div class="box-label">Changes Applied</div>
+          <ul>${listHtml}</ul>
+        </div>`
+    }
+
+    const isLast = num === MAX_ITERATIONS
+    const lineClass = isDone ? 'done' : 'pending'
+
+    body.innerHTML += `
+      <div class="iter-row">
+        <div class="iter-dot-col">
+          <div class="iter-dot ${dotClass}">${dotText}</div>
+          ${!isLast ? `<div class="iter-line ${lineClass}"></div>` : ''}
+        </div>
+        <div class="iter-content">
+          <div class="iter-title ${dotClass === 'pending' ? 'pending' : ''}">
+            Iteration ${num}${statusHtml}
+          </div>
+          ${reviewHtml}
+          ${changesHtml}
+        </div>
+      </div>`
+  }
+}
+
+// ── Result Viewer ──────────────────────────────────────────────────
+function renderResult() {
+  const r = state.result
+  const pathCount    = Object.keys(r.final_spec?.paths || {}).length
+  const exampleCount = countExamples(r.final_spec)
+  const iters        = r.summary?.total_iterations ?? 0
+  const changes      = r.summary?.total_changes ?? 0
+  const origErrors   = (r.original_validation_errors || []).length
+  const finalErrors  = (r.validation_errors || []).length
+  let validationNote = ''
+  if (origErrors > 0) {
+    validationNote = finalErrors < origErrors
+      ? ` · ⚠ ${origErrors} validation errors in original → ${finalErrors} after enhancement`
+      : ` · ⚠ ${origErrors} validation errors (pre-existing in original)`
+  } else if (finalErrors > 0) {
+    validationNote = ` · ⚠ ${finalErrors} validation errors introduced`
+  }
+  document.getElementById('result-meta').textContent =
+    `${pathCount} endpoints · ${exampleCount} examples · ${iters} iteration${iters !== 1 ? 's' : ''} · ${changes} total changes${validationNote}`
+
+  // YAML tab
+  document.getElementById('tab-yaml').textContent = r.final_spec_yaml || ''
+
+  // Diff tab
+  renderDiff(r.original_spec_yaml || '', r.final_spec_yaml || '')
+
+  // Summary tab
+  renderSummary(r.iterations, r.summary)
+
+  // Endpoints tab
+  renderEndpoints(r.final_spec)
+}
+
+function countOpExamples(op) {
+  const req = Object.values(op?.requestBody?.content || {})
+    .reduce((n, m) => n + Object.keys(m?.examples || {}).length, 0)
+  const res = Object.values(op?.responses || {})
+    .flatMap(r => Object.values(r?.content || {}))
+    .reduce((n, m) => n + Object.keys(m?.examples || {}).length, 0)
+  return req + res
+}
+
+function countExamples(spec) {
+  let count = 0
+  for (const pathItem of Object.values(spec?.paths || {})) {
+    for (const [method, op] of Object.entries(pathItem)) {
+      if (!HTTP_METHODS.includes(method)) continue
+      count += countOpExamples(op)
+    }
+  }
+  return count
+}
+
+// ── Diff ───────────────────────────────────────────────────────────
+let _showOnlyChanges = false
+let _diffData = null
+
+function computeDiff(origStr, enhStr) {
+  const origLines = origStr.split('\n')
+  const enhLines  = enhStr.split('\n')
+
+  const origCount = {}, enhCount = {}
+  origLines.forEach(l => origCount[l] = (origCount[l] || 0) + 1)
+  enhLines.forEach(l  => enhCount[l]  = (enhCount[l]  || 0) + 1)
+
+  const origResult = origLines.map(line => ({ content: line, type: (enhCount[line] || 0) > 0 ? 'unchanged' : 'removed' }))
+  const enhResult  = enhLines.map(line  => ({ content: line, type: (origCount[line] || 0) > 0 ? 'unchanged' : 'added'   }))
+
+  return {
+    origResult,
+    enhResult,
+    addedCount:   enhResult.filter(l => l.type === 'added').length,
+    removedCount: origResult.filter(l => l.type === 'removed').length,
+  }
+}
+
+function renderDiff(origStr, enhStr) {
+  _diffData = computeDiff(origStr, enhStr)
+  const container = document.getElementById('tab-diff')
+  container.innerHTML = `
+    <div class="diff-toolbar">
+      <span class="diff-badge added">+${_diffData.addedCount} added</span>
+      <span class="diff-badge removed">-${_diffData.removedCount} removed</span>
+      <div style="flex:1"></div>
+      <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="diff-changes-only" onchange="toggleDiffFilter()"> Show changes only
+      </label>
+    </div>
+    <div class="diff-panels" style="flex:1;overflow:hidden">
+      <div class="diff-panel">
+        <div class="diff-panel-header">
+          Original
+          ${_diffData.removedCount ? `<span class="diff-badge removed">-${_diffData.removedCount}</span>` : ''}
+        </div>
+        <div class="diff-panel-body" id="diff-orig"></div>
+      </div>
+      <div class="diff-divider"></div>
+      <div class="diff-panel">
+        <div class="diff-panel-header">
+          Enhanced
+          ${_diffData.addedCount ? `<span class="diff-badge added">+${_diffData.addedCount}</span>` : ''}
+        </div>
+        <div class="diff-panel-body" id="diff-enh"></div>
+      </div>
+    </div>`
+  container.style.display = 'flex'
+  container.style.flexDirection = 'column'
+  container.style.height = '100%'
+  paintDiff()
+}
+
+function paintDiff() {
+  const onlyChanges = _showOnlyChanges
+  const origLines = onlyChanges ? _diffData.origResult.filter(l => l.type !== 'unchanged') : _diffData.origResult
+  const enhLines  = onlyChanges ? _diffData.enhResult.filter(l => l.type !== 'unchanged')  : _diffData.enhResult
+  document.getElementById('diff-orig').innerHTML = origLines.map((l, i) => diffLineHtml(l, i+1)).join('')
+  document.getElementById('diff-enh').innerHTML  = enhLines.map((l, i) => diffLineHtml(l, i+1)).join('')
+}
+
+function diffLineHtml(line, num) {
+  const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  '
+  return `<div class="diff-line ${line.type}"><span class="diff-num">${num}</span><span class="diff-text">${prefix}${escHtml(line.content)}</span></div>`
+}
+
+function toggleDiffFilter() {
+  _showOnlyChanges = document.getElementById('diff-changes-only').checked
+  paintDiff()
+}
+
+// ── Summary ────────────────────────────────────────────────────────
+function renderSummary(iterations, summary) {
+  const completedBy = summary?.completed_by_reviewer ? 'Reviewer ✓' : 'Max Iterations'
+  const cbColor     = summary?.completed_by_reviewer ? '#34a853' : '#fbbc04'
+  const stats = [
+    { label:'Iterations Run', value: summary?.total_iterations ?? iterations.length, color:'#4285f4' },
+    { label:'Total Changes',  value: summary?.total_changes ?? 0,                   color:'#34a853' },
+    { label:'Completed By',   value: completedBy,                                   color: cbColor  },
+  ]
+  let html = `<div class="stats-grid">${stats.map(s =>
+    `<div class="stat-box"><div class="stat-value" style="color:${s.color}">${s.value}</div><div class="stat-label">${s.label}</div></div>`
+  ).join('')}</div>`
+
+  iterations.forEach((it, i) => {
+    const isLast = i === iterations.length - 1
+    const suggs   = (it.suggestions || []).map(s => `<li class="suggestions">${escHtml(s)}</li>`).join('') || '<div class="iter-col-empty">No suggestions</div>'
+    const changes  = (it.changes_made || []).map(c => `<li class="changes">${escHtml(c)}</li>`).join('') || '<div class="iter-col-empty">No changes recorded</div>'
+    html += `
+      <div class="iter-card">
+        <button class="iter-card-header" onclick="toggleCard(this)">
+          <div class="iter-num-badge">${it.iteration}</div>
+          <div class="iter-card-title">
+            <h4>Iteration ${it.iteration}
+              <span class="badge badge-blue">${(it.suggestions||[]).length} suggestions</span>
+              <span class="badge badge-green">${(it.changes_made||[]).length} changes</span>
+            </h4>
+            <p>${escHtml(it.review_summary)}</p>
+          </div>
+          <span style="font-size:16px;color:#888">${isLast ? '▲' : '▼'}</span>
+        </button>
+        <div class="iter-card-body" ${isLast ? '' : 'style="display:none"'}>
+          <div class="iter-col">
+            <div class="iter-col-label blue">Reviewer Suggestions</div>
+            <ul>${suggs}</ul>
+          </div>
+          <div class="iter-col-divider"></div>
+          <div class="iter-col">
+            <div class="iter-col-label green">Changes Applied</div>
+            <ul>${changes}</ul>
+          </div>
+        </div>
+      </div>`
+  })
+
+  document.getElementById('tab-summary').innerHTML = html
+}
+
+function toggleCard(btn) {
+  const body = btn.nextElementSibling
+  const arrow = btn.querySelector('span:last-child')
+  const hidden = body.style.display === 'none'
+  body.style.display = hidden ? 'flex' : 'none'
+  arrow.textContent  = hidden ? '▲' : '▼'
+}
+
+// ── Endpoints ──────────────────────────────────────────────────────
+const METHOD_COLORS = { get:'#34a853', post:'#4285f4', put:'#fbbc04', patch:'#ff6d00', delete:'#e53935' }
+const HTTP_METHODS  = ['get','post','put','patch','delete','options','head']
+
+function renderEndpoints(spec) {
+  let html = ''
+  for (const [path, pathItem] of Object.entries(spec?.paths || {})) {
+    for (const method of HTTP_METHODS) {
+      const op = pathItem[method]
+      if (!op) continue
+      const total = countOpExamples(op)
+      const color = METHOD_COLORS[method] || '#888'
+      html += `
+        <div class="endpoint-row">
+          <span class="method-badge" style="background:${color}">${method}</span>
+          <span class="endpoint-path">${escHtml(path)}</span>
+          <span class="endpoint-summary">${escHtml(op.summary || '')}</span>
+          <span class="example-badge ${total > 0 ? 'has' : 'none'}">${total > 0 ? '+' + total + ' examples' : 'no examples'}</span>
+        </div>`
+    }
+  }
+  document.getElementById('tab-endpoints').innerHTML = html || '<p style="padding:24px;color:#888;text-align:center">No endpoints found.</p>'
+}
+
+// ── Tab switching ──────────────────────────────────────────────────
+function switchTab(name) {
+  ['yaml','diff','summary','endpoints'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none'
+    document.querySelector(`[data-tab="${t}"]`).classList.toggle('active', t === name)
+  })
+}
+
+// ── Copy / Download ────────────────────────────────────────────────
+function copyYaml() {
+  navigator.clipboard.writeText(state.result?.final_spec_yaml || '')
+  const btn = document.getElementById('copy-btn')
+  btn.textContent = '✅ Copied'
+  setTimeout(() => btn.textContent = '📋 Copy', 2000)
+}
+
+function downloadYaml() {
+  const yaml = state.result?.final_spec_yaml || ''
+  const name = (state.originalFilename || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
+  triggerDownload(yaml, name, 'text/yaml')
+}
+
+async function exportPostman() {
+  const btn = document.getElementById('postman-btn')
+  btn.textContent = '⟳'
+  btn.disabled = true
+  try {
+    const yaml = state.result?.final_spec_yaml || ''
+    const file = new File([yaml], 'enhanced.yaml', { type:'text/yaml' })
+    const form = new FormData()
+    form.append('oas_file', file)
+    const resp = await fetch('/convert', { method:'POST', body:form })
+    if (!resp.ok) throw new Error(`Conversion failed: ${resp.status}`)
+    const data = await resp.json()
+    const name = (state.originalFilename || 'oas').replace(/\.(json|yaml|yml)$/, '_postman.json')
+    triggerDownload(JSON.stringify(data.collection, null, 2), name, 'application/json')
+  } catch(e) {
+    alert('Export failed: ' + e.message)
+  } finally {
+    btn.textContent = '📮 Postman'
+    btn.disabled = false
+  }
+}
+
+function triggerDownload(content, filename, type) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([content], { type }))
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// ── Expand/collapse "more" buttons ─────────────────────────────────
+const _expandData = new Map()
+let   _expandId   = 0
+
+function makeExpandBtn(allItems, previewCount) {
+  const hidden = allItems.slice(previewCount)
+  if (!hidden.length) return ''
+  const id = ++_expandId
+  _expandData.set(id, hidden)
+  return `<button class="more-btn" data-eid="${id}" onclick="toggleMore(this)">+${hidden.length} more — click to expand</button>`
+}
+
+function toggleMore(btn) {
+  const items = _expandData.get(parseInt(btn.dataset.eid))
+  if (btn.dataset.expanded === '1') {
+    btn.parentElement.querySelectorAll('.extra-item').forEach(el => el.remove())
+    btn.textContent   = `+${items.length} more — click to expand`
+    btn.dataset.expanded = '0'
+  } else {
+    items.forEach(text => {
+      const li = document.createElement('li')
+      li.className = 'extra-item'
+      li.innerHTML  = escHtml(text)
+      btn.parentElement.insertBefore(li, btn)
+    })
+    btn.textContent   = '▲ show less'
+    btn.dataset.expanded = '1'
+  }
+}
+
+// ── Utilities ──────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+}
+</script>
+</body>
+</html>

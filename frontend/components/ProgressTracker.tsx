@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Iteration, ReviewData } from '../types'
+import type { Iteration, IterationStep, ReviewData } from '../types'
 
 const MAX_ITERATIONS = 5
 const SUGGESTIONS_PREVIEW = 3
@@ -39,11 +39,12 @@ function CollapsibleList({ items, preview, color, moreColor }: CollapsibleListPr
 interface IterationRowProps {
   num: number
   status: 'pending' | 'active' | 'done' | 'skipped'
+  step?: IterationStep
   review?: ReviewData
   changes?: string[]
 }
 
-function IterationRow({ num, status, review, changes }: IterationRowProps) {
+function IterationRow({ num, status, step, review, changes }: IterationRowProps) {
   const colors = { pending: '#ccc', active: '#4285f4', done: '#34a853', skipped: '#34a853' }
   const color = colors[status]
 
@@ -68,8 +69,11 @@ function IterationRow({ num, status, review, changes }: IterationRowProps) {
       <div style={{ flex: 1, paddingBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, color: status === 'pending' ? '#999' : '#1a1a1a', marginBottom: 4 }}>
           Iteration {num}
-          {status === 'active' && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: '#4285f4', fontWeight: 400 }}>● running...</span>
+          {status === 'active' && step === 'reviewing' && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#4285f4', fontWeight: 400 }}>● reviewing...</span>
+          )}
+          {status === 'active' && step === 'enhancing' && (
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#f4a234', fontWeight: 400 }}>● enhancing spec...</span>
           )}
           {status === 'skipped' && (
             <span style={{ marginLeft: 8, fontSize: 12, color: '#34a853', fontWeight: 400 }}>✓ reviewer satisfied — done early</span>
@@ -105,11 +109,12 @@ function IterationRow({ num, status, review, changes }: IterationRowProps) {
 
 interface ProgressTrackerProps {
   currentIteration: number
+  currentStep: IterationStep
   iterations: Iteration[]
   reviewData: Record<number, ReviewData>
 }
 
-export default function ProgressTracker({ currentIteration, iterations, reviewData }: ProgressTrackerProps) {
+export default function ProgressTracker({ currentIteration, currentStep, iterations, reviewData }: ProgressTrackerProps) {
   const rows = Array.from({ length: MAX_ITERATIONS }, (_, i) => {
     const num = i + 1
     const iterData = iterations.find(it => it.iteration === num)
@@ -121,6 +126,7 @@ export default function ProgressTracker({ currentIteration, iterations, reviewDa
     return {
       num,
       status: (isSkipped ? 'skipped' : isDone ? 'done' : isActive ? 'active' : 'pending') as IterationRowProps['status'],
+      step: isActive ? currentStep : undefined,
       review: reviewForNum,
       changes: iterData?.changes_made,
     }
@@ -133,7 +139,7 @@ export default function ProgressTracker({ currentIteration, iterations, reviewDa
         <div style={{ fontSize: 13, opacity: 0.9 }}>AI review → enhance loop · up to {MAX_ITERATIONS} iterations</div>
       </div>
       <div style={{ padding: '24px' }}>
-        {rows.map(row => <IterationRow key={row.num} {...row} />)}
+        {rows.map(row => <IterationRow key={row.num} {...row} step={row.step} />)}
       </div>
     </div>
   )

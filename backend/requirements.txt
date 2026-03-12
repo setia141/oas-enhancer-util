@@ -1,7 +1,7 @@
-google-adk[extensions]
-litellm>=1.51.0
+openai>=1.30.0
 fastapi
 uvicorn[standard]
 python-multipart
 pyyaml
 python-dotenv
+openapi-spec-validator>=0.7.0
