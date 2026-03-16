@@ -1,5 +1,5 @@
 """
-Flask frontend for OAS Enhancer.
+Flask frontend — common homepage + OAS Enhancer util.
 Proxies /enhance (SSE) and /convert to the FastAPI backend.
 """
 import os
@@ -8,11 +8,17 @@ from flask import Flask, render_template, request, Response, stream_with_context
 
 app = Flask(__name__)
 
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+BACKEND_URL         = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+REDUNDANCY_UTIL_URL = os.environ.get("REDUNDANCY_UTIL_URL", "#")
 
 
 @app.route("/")
-def index():
+def home():
+    return render_template("home.html", redundancy_util_url=REDUNDANCY_UTIL_URL)
+
+
+@app.route("/oas-enhancer")
+def oas_enhancer():
     return render_template("index.html")
 
 

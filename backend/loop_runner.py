@@ -245,6 +245,11 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
                     iteration, len(changes), spec_changed, not validation_errors, before_paths, after_paths)
         if not spec_changed:
             logger.warning("Iteration %d — enhancer returned the original spec unchanged", iteration)
+        if spec_changed and not changes:
+            logger.warning("Iteration %d — enhancer modified the spec but reported 0 changes_made; "
+                           "reviewer will have no context for next iteration", iteration)
+        logger.debug("Iteration %d — enhanced spec after sanitization:\n%s",
+                     iteration, json.dumps(enhanced, indent=2))
 
         return {"enhanced_spec": enhanced, "changes_made": changes, "validation_errors": validation_errors}
 
@@ -296,6 +301,12 @@ async def run_enhancement_loop(
 
     for i in range(MAX_ITERATIONS):
         iteration = i + 1
+
+        # ── Stall check before reviewer — prevents showing suggestions that won't be actioned ──
+        if stalled_iterations >= 3:
+            logger.info("Iteration %d — stopping: no improvement for 3 consecutive iterations", iteration)
+            break
+
         yield {"type": "iteration_start", "iteration": iteration}
 
         # ── Reviewer ──────────────────────────────────────────────
@@ -307,21 +318,11 @@ async def run_enhancement_loop(
 
         yield {"type": "review_complete", "iteration": iteration, "data": review}
 
-        suggestion_count = len(review["suggestions"])
-        if prev_suggestion_count > 0 and suggestion_count >= prev_suggestion_count:
-            stalled_iterations += 1
-        else:
-            stalled_iterations = 0
-        prev_suggestion_count = suggestion_count
-
         if review["satisfied"] or not review["suggestions"]:
             logger.info("Iteration %d — stopping: reviewer satisfied", iteration)
             break
-        if stalled_iterations >= 3:
-            logger.info("Iteration %d — stopping: no improvement for 3 consecutive iterations", iteration)
-            break
 
-        # ── Enhancer ──────────────────────────────────────────────
+        # ── Enhancer — always runs if reviewer gave suggestions ────
         yield {"type": "enhance_start", "iteration": iteration}
         result = await _run_enhancer(state, iteration)
         state["current_spec"] = result["enhanced_spec"]
@@ -336,6 +337,14 @@ async def run_enhancement_loop(
             "changes_made":   result["changes_made"],
         })
         yield {"type": "enhance_complete", "iteration": iteration, "data": {"changes_made": result["changes_made"]}}
+
+        # ── Update stall tracking after enhancer ran ───────────────
+        suggestion_count = len(review["suggestions"])
+        if prev_suggestion_count > 0 and suggestion_count >= prev_suggestion_count:
+            stalled_iterations += 1
+        else:
+            stalled_iterations = 0
+        prev_suggestion_count = suggestion_count
 
     def _to_yaml(spec: dict) -> str:
         return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)

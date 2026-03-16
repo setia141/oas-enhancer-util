@@ -1,97 +1,121 @@
-# OAS Enhancer — React + Google ADK
+# OAS Enhancer — Flask + FastAPI + OpenAI
 
-An AI-powered web application that automatically enhances OpenAPI Specification (OAS) files
-with descriptions, examples, and error schemas using a multi-agent review loop.
-Built with React (frontend) and Google Agent Development Kit / FastAPI (backend),
-secured with Azure AD SSO.
+An AI-powered web application that automatically enhances OpenAPI Specification (OAS) files with descriptions, examples, and error schemas using a multi-agent review → enhance loop.
 
 ---
 
-## Architecture Overview
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [How the Enhancement Loop Works](#how-the-enhancement-loop-works)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Local Setup](#local-setup)
+- [Environment Variables](#environment-variables)
+- [Running the App](#running-the-app)
+- [Customising Reviewer Rules](#customising-reviewer-rules)
+- [API Reference](#api-reference)
+- [State Flow](#state-flow)
+- [Security Notes](#security-notes)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+Upload an OAS file (JSON or YAML, Swagger 2.0 or OAS 3.x). The app runs a multi-agent loop where:
+
+1. A **Reviewer** agent reads the spec and identifies issues (missing descriptions, examples, error schemas, etc.)
+2. An **Enhancer** agent applies all suggestions and returns the improved spec
+3. The loop repeats up to 5 iterations until the reviewer is satisfied
+
+Progress streams live to the browser via Server-Sent Events (SSE). The final enhanced spec is available in both YAML and JSON, with a side-by-side diff against the original.
+
+Optionally upload a Postman collection alongside the OAS file to enable breaking change improvements (schema alignment).
+
+---
+
+## Architecture
 
 ```
-Browser → React Frontend (Vite :5173)
-               │
-               │  Azure AD SSO (MSAL — auto redirect, no login button)
-               │  Group membership via ID token claims (no admin consent)
-               │
-               ├── POST /enhance  ──→  FastAPI :8000
-               │                           └── Enhancement Loop (up to 5 iterations)
-               │                                 ├── Reviewer Agent (GPT-4o)
-               │                                 │     reads spec from session state
-               │                                 │     writes: satisfied, summary, suggestions
-               │                                 │
-               │                                 └── Enhancer Agent (GPT-4.1-mini)
-               │                                       reads suggestions from session state
-               │                                       writes: updated spec, changes_made
-               │
-               └── POST /convert  ──→  FastAPI :8000
-                                           └── Native Python OAS → Postman converter
+Browser
+   │
+   │  HTTP / SSE
+   ▼
+Flask Frontend  (flask_ui — port 3000)
+   │  app.py — serves UI, proxies /enhance and /convert to backend
+   │
+   │  POST /enhance  (proxied SSE stream)
+   │  POST /convert
+   ▼
+FastAPI Backend  (backend — port 8000)
+   │  server.py — /enhance (SSE), /convert, /health
+   │
+   └── Enhancement Loop  (loop_runner.py — up to 5 iterations)
+         │
+         ├── Reviewer Agent  (gpt-4.1-mini)
+         │     reads current spec + previous changes context
+         │     calls submit_review tool
+         │     outputs: satisfied, summary, suggestions[]
+         │
+         └── Enhancer Agent  (gpt-4.1)
+               reads current spec + reviewer suggestions
+               calls save_enhanced_spec tool
+               outputs: full updated spec, changes_made[]
 ```
 
-All OAS content passes through **ADK session state** (not message text) to avoid ADK's
-template variable substitution which would break on OAS path params like `{id}`.
+**Why two separate servers?**
+Flask handles the browser-facing UI (templating, file uploads, SSE proxying). FastAPI handles the async agent loop with proper SSE streaming and multipart file handling. The Flask frontend proxies all `/enhance` and `/convert` requests to FastAPI — the browser never calls FastAPI directly.
 
 ---
 
 ## How the Enhancement Loop Works
 
 ```
-Upload OAS file
-      ↓
+Upload OAS file (+ optional Postman collection + optional instructions)
+      │
+      ▼
+Parse and validate original spec — record baseline errors
+      │
+      ▼
 For each iteration (max 5):
-  1. Reviewer agent (gpt-4.1-mini) runs
-       → calls get_breaking_changes_policy
-       → calls get_oas_spec (reads spec from session state)
-       → calls submit_review (writes satisfied/summary/suggestions to session state)
-  2. If satisfied = true OR suggestions = [] → stop loop
-  3. Enhancer agent (gpt-4o) runs
-       → calls get_review_suggestions (reads suggestions from session state)
-       → calls get_oas_spec (reads current spec from session state)
-       → applies ALL suggestions
-       → calls save_enhanced_spec (writes updated spec + changes to session state)
-  4. Next iteration reviewer sees the updated spec
-      ↓
-done event: original spec, final spec (YAML), per-iteration change history
+  │
+  ├── 1. Check stall guard — if no improvement for 3 consecutive iterations → stop
+  │
+  ├── 2. Reviewer (gpt-4.1-mini) reads current spec
+  │         → calls submit_review(satisfied, summary, suggestions)
+  │
+  ├── 3. If satisfied = true OR suggestions = [] → stop (reviewer is happy)
+  │
+  ├── 4. Enhancer (gpt-4.1) reads spec + all suggestions
+  │         → calls save_enhanced_spec(enhanced_spec, changes_made)
+  │
+  └── 5. Spec post-processing:
+            - Misplaced path items rescued from top level into paths{}
+            - Non-OAS top-level keys stripped
+            - Non-path keys stripped from paths{}
+            - Swagger 2.0 fields (produces/consumes) stripped from OAS 3.x operations
+            - Duplicate operationIds renamed (_2, _3, …)
+            - Paths/operations dropped by the model restored from previous iteration
+            - Updated spec validated — errors logged
+      │
+      ▼
+done event:
+  original spec (JSON + YAML), final spec (JSON + YAML),
+  per-iteration history, original validation errors, final validation errors
 ```
 
-Breaking changes are only allowed when a Postman collection is provided.
-Without it, the agents make only additive improvements (descriptions, examples, error schemas).
+**Breaking changes policy:**
+- Without Postman collection → additive only (add descriptions, examples, new error responses). Existing paths, schemas, types, formats never changed.
+- With Postman collection → breaking changes allowed. Enhancer may align schemas with actual Postman responses.
 
-### Why two different models?
+**Why two different models?**
 
-The reviewer only needs to read the spec and output a short suggestion list — `gpt-4.1-mini`
-handles this well and is fast. The enhancer must read the full spec, apply all suggestions,
-and return the **complete modified spec** as a structured tool call argument. This is a large
-output task that smaller models consistently fail on (they fall back to generating plain text
-instead of calling the tool), causing timeouts. `gpt-4o` handles it reliably.
-
----
-
-## Features
-
-- **Multi-agent review loop** — Reviewer identifies issues, Enhancer applies fixes; repeated up to 5 times until the reviewer is satisfied
-- **Real-time SSE streaming** — iteration progress, reviewer summaries, and applied changes stream live to the UI as they happen
-- **YAML output** — final enhanced spec is delivered as YAML; diff view is YAML-based for readability
-- **Side-by-side diff view** — line-level diff between original and enhanced spec (added/removed highlighting)
-- **Change history** — per-iteration accordion showing reviewer suggestions vs changes applied
-- **Endpoint summary** — visual table of all endpoints with HTTP method, summary, and example count
-- **Breaking changes policy** — controlled by whether a Postman collection is uploaded
-- **OAS → Postman export** — convert the enhanced spec to Postman Collection v2.1 (native Python, no npm)
-- **Drag-and-drop uploads** — for both OAS and Postman files
-- **Azure AD SSO** — automatic redirect on load, no sign-in button; session persists across refreshes
-- **Group-based access control** — only members of a specific Azure AD security group can access the app
-
----
-
-## Prerequisites
-
-| Requirement | Notes |
-|---|---|
-| Python 3.11+ | |
-| Node.js 18+ | |
-| OpenAI API key | For GPT-4.1-mini (reviewer) and GPT-4o (enhancer) |
-| Azure AD App Registration | See setup below |
+| Agent | Model | Reason |
+|---|---|---|
+| Reviewer | `gpt-4.1-mini` | Only reads spec and outputs a short suggestion list — fast and cost-efficient |
+| Enhancer | `gpt-4.1` | Must read the full spec, apply all changes, and return the **complete modified spec** as a structured tool call — large output task requiring the stronger model |
 
 ---
 
@@ -99,344 +123,146 @@ instead of calling the tool), causing timeouts. `gpt-4o` handles it reliably.
 
 ```
 sample-adk-app/
-├── backend/
+│
+├── backend/                        # FastAPI backend
 │   ├── __init__.py
-│   ├── server.py               # FastAPI: /enhance (SSE), /convert, /health
-│   ├── loop_runner.py          # ADK runner orchestration — review→enhance loop
+│   ├── server.py                   # API endpoints: /enhance (SSE), /convert, /health
+│   ├── loop_runner.py              # Multi-agent loop, spec sanitization, SSE event stream
 │   ├── requirements.txt
-│   ├── .env                    # OPENAI_API_KEY (git-ignored)
+│   ├── .env                        # OPENAI_API_KEY — git-ignored, create manually
 │   ├── agents/
 │   │   ├── __init__.py
-│   │   ├── prompts.py          # ← swap your own instructions here
-│   │   ├── reviewer.py         # ADK Agent: GPT-4o, reviews OAS spec
-│   │   ├── enhancer.py         # ADK Agent: GPT-4.1-mini, applies suggestions
-│   │   └── tools.py            # Shared session-state tools (get/save spec, submit review)
+│   │   ├── prompts.py              # ← edit REVIEWER_RULES here to change what gets checked
+│   │   └── tools.py                # OpenAI function schemas + breaking-changes policy helper
 │   └── tools/
 │       ├── __init__.py
-│       └── oas_to_postman.py   # Native Python OAS 3.x → Postman v2.1 converter
+│       └── oas_to_postman.py       # Native Python OAS 3.x → Postman Collection v2.1 converter
 │
-└── frontend/
-    ├── index.html
-    ├── vite.config.js          # Proxies /enhance, /convert, /health → :8000
-    ├── package.json
-    ├── .env                    # Azure AD config (git-ignored)
-    ├── .env.example            # Template — copy to .env and fill in values
-    └── src/
-        ├── main.jsx            # MsalProvider + handleRedirectPromise (before first render)
-        ├── App.jsx             # Auth gate + SSE reader + phase state machine
-        ├── index.css
-        ├── auth/
-        │   ├── msalConfig.js   # MSAL instance, scopes, allowed group ID
-        │   └── useAuth.js      # Auto-redirect SSO + ID token group claim check
-        └── components/
-            ├── AccessDenied.jsx    # Shown when user is not in the AD group
-            ├── UploadForm.jsx      # Drag-and-drop OAS + Postman upload form
-            ├── ProgressTracker.jsx # Live iteration timeline (streams in real time)
-            ├── ResultViewer.jsx    # Tabs: YAML, Diff, Change History, Endpoints
-            ├── DiffViewer.jsx      # Side-by-side YAML diff with add/remove highlighting
-            └── IterationSummary.jsx # Per-iteration accordion: suggestions vs changes
+├── flask_ui/                       # Flask frontend
+│   ├── app.py                      # Flask server — UI routes + proxy to backend
+│   ├── requirements.txt
+│   └── templates/
+│       ├── home.html               # Landing page
+│       └── index.html              # OAS Enhancer single-page app (SSE reader, diff viewer)
+│
+├── README.md
+├── Dockerfile
+└── start.sh                        # Production startup (uvicorn + Flask)
 ```
 
 ---
 
-## Docker (single image — frontend + backend)
+## Prerequisites
 
-The Dockerfile uses a two-stage build:
-- **Stage 1 (node:20-alpine)** — builds the React app with Vite
-- **Stage 2 (python:3.11-slim)** — runs FastAPI, which serves both the API and the built frontend static files
+| Requirement | Version | Notes |
+|---|---|---|
+| Python | 3.11+ | Required for both backend and frontend |
+| OpenAI API key | — | Needs access to `gpt-4.1-mini` and `gpt-4.1` models |
 
-Azure AD values are baked into the frontend bundle at build time (Vite replaces `import.meta.env.*` at compile time), so they must be passed as `--build-arg`. The OpenAI key is a runtime secret passed via `-e`.
+---
 
-### Build
+## Local Setup
+
+### Step 1 — Clone and enter the project
 
 ```bash
+git clone <your-repo-url>
 cd sample-adk-app
-
-docker build \
-  --build-arg VITE_AZURE_CLIENT_ID=<client-id> \
-  --build-arg VITE_AZURE_TENANT_ID=<tenant-id> \
-  --build-arg VITE_AZURE_ALLOWED_GROUP_ID=<group-object-id> \
-  --build-arg VITE_REDIRECT_URI=https://your-domain.com \
-  -t oas-enhancer .
 ```
-
-### Run
-
-```bash
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=your_openai_api_key \
-  oas-enhancer
-```
-
-App is available at `http://localhost:8000`.
-
-> **Note:** Update `VITE_REDIRECT_URI` and the Azure AD App Registration redirect URI to match your deployment URL before building.
 
 ---
 
-## Running Locally
+### Step 2 — Set up the Backend
 
-### Option 1 — Without Docker (recommended for development)
-
-Two terminals:
-
-**Terminal 1 — Backend:**
-```bash
-cd sample-adk-app
-backend\Scripts\activate        # Windows
-# source backend/bin/activate   # macOS/Linux
-uvicorn backend.server:app --reload --port 8000
-```
-
-**Terminal 2 — Frontend:**
-```bash
-cd sample-adk-app/frontend
-npm run dev
-```
-
-Open `http://localhost:5173` — Vite proxies `/enhance`, `/convert`, `/health` to the backend on port 8000.
-
----
-
-### Option 2 — With Docker locally
+#### 2a. Create a virtual environment
 
 ```bash
-cd sample-adk-app
-
-docker build \
-  --build-arg VITE_AZURE_CLIENT_ID=<client-id> \
-  --build-arg VITE_AZURE_TENANT_ID=<tenant-id> \
-  --build-arg VITE_AZURE_ALLOWED_GROUP_ID=<group-object-id> \
-  --build-arg VITE_REDIRECT_URI=http://localhost:8000 \
-  -t oas-enhancer .
-
-docker run -p 8000:8000 -e OPENAI_API_KEY=your_key oas-enhancer
-```
-
-Open `http://localhost:8000`.
-
-> **Important:** When running via Docker, `VITE_REDIRECT_URI` must be `http://localhost:8000` (not 5173).
-> You must also add `http://localhost:8000` as a redirect URI in your Azure AD App Registration.
-
-**Which to use:** Option 1 for day-to-day development (hot reload, no rebuild on changes).
-Option 2 to test the Docker image before deploying to production.
-
----
-
-## First-time Setup
-
-## Setup
-
-### 1. Azure AD App Registration
-
-1. Go to **Azure Portal → Azure Active Directory → App registrations → New registration**
-2. Set **Redirect URI**: `http://localhost:5173` (type: **Single-page application**)
-3. Note down the **Application (client) ID** and **Directory (tenant) ID**
-
-**Enable group claims** (required for group access control — no admin consent needed):
-
-4. App registration → **Token configuration → Add groups claim**
-5. Select **Security groups** → Save
-
-**Get the allowed group Object ID:**
-
-6. Azure Portal → **Azure Active Directory → Groups** → open your group → **Overview** → copy **Object ID**
-
----
-
-### 2. Backend
-
-```bash
-cd sample-adk-app
-
-# Create and activate a virtual environment (recommended)
+# From sample-adk-app/
 python -m venv backend/venv
-source backend/venv/bin/activate   # Windows: backend\venv\Scripts\activate
 
-# Install dependencies
-pip install -r backend/requirements.txt
+# Windows
+backend\venv\Scripts\activate
 
-# Create backend env file
-echo "OPENAI_API_KEY=your_openai_api_key_here" > backend/.env
-
-# Start the FastAPI server
-uvicorn backend.server:app --reload --port 8000
+# macOS / Linux
+source backend/venv/bin/activate
 ```
 
-Server runs at `http://localhost:8000`. Interactive API docs at `http://localhost:8000/docs`.
-
----
-
-### 3. Frontend
+#### 2b. Install dependencies
 
 ```bash
-cd sample-adk-app/frontend
-
-# Copy the env template and fill in your Azure AD values
-cp .env.example .env
+pip install -r backend/requirements.txt
 ```
 
-Edit `frontend/.env`:
+#### 2c. Create the environment file
+
+```bash
+# Windows
+copy NUL backend\.env
+
+# macOS / Linux
+touch backend/.env
+```
+
+Open `backend/.env` and add:
 
 ```env
-VITE_AZURE_CLIENT_ID=<your-application-client-id>
-VITE_AZURE_TENANT_ID=<your-directory-tenant-id>
-VITE_AZURE_ALLOWED_GROUP_ID=<your-security-group-object-id>
-VITE_REDIRECT_URI=http://localhost:5173
+OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+> Get your API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Ensure your account has access to `gpt-4.1` and `gpt-4.1-mini`.
+
+---
+
+### Step 3 — Set up the Frontend
+
+Open a **new terminal** (keep the backend terminal open).
+
+#### 3a. Create a virtual environment
 
 ```bash
-npm install
-npm run dev
-# → http://localhost:5173
+cd sample-adk-app/flask_ui
+
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS / Linux
+source venv/bin/activate
 ```
 
-> **Note:** Restart the dev server after any change to `.env` — Vite loads env vars at startup only.
+#### 3b. Install dependencies
 
----
-
-## Usage
-
-1. Open `http://localhost:5173` — the app immediately redirects to Microsoft login (no button needed)
-2. Sign in with your Azure AD account
-3. If your account is in the authorized group, the app loads; otherwise you see an Access Denied screen
-4. Upload your **OAS spec** (`.json`, `.yaml`, `.yml`) — required
-5. Upload a **Postman Collection v2.1** (`.json`) — optional
-   - With Postman: breaking changes allowed — agents can align spec with actual API responses
-   - Without Postman: additive only — descriptions, examples, error schemas added; no breaking changes
-6. Add any **extra instructions** for the agents — optional (e.g. "focus on error responses")
-7. Click **Enhance OAS** — the enhancement loop starts, streaming progress live:
-   - Each iteration shows reviewer findings and the changes the enhancer applied
-   - Loop stops when the reviewer is satisfied or after 5 iterations
-8. Review results in four tabs:
-   - **Enhanced YAML** — full spec in a dark-theme code block; copy or download
-   - **Diff View** — side-by-side YAML diff between original and enhanced
-   - **Change History** — per-iteration accordion of suggestions vs applied changes
-   - **Endpoint Summary** — per-endpoint table showing method, summary, and example count
-9. Click **Export Postman** to convert the enhanced spec to a Postman Collection and download it
-
----
-
-## Model Selection
-
-| Agent | Model | Reason |
-|---|---|---|
-| Reviewer | `gpt-4.1-mini` | Simple task — reads spec, returns a short suggestion list; fast and cheap |
-| Enhancer | `gpt-4o` | Hard task — must apply all suggestions and return the **complete modified spec** as a tool call argument; mini models time out on large specs |
-
-Models are configured in `backend/agents/reviewer.py` and `backend/agents/enhancer.py`.
-
----
-
-## Customising Agent Instructions
-
-To use your own reviewer or enhancer prompts, edit **`backend/agents/prompts.py`**:
-
-```python
-REVIEWER_INSTRUCTION = """
-Your custom reviewer prompt here...
-"""
-
-ENHANCER_INSTRUCTION = """
-Your custom enhancer prompt here...
-"""
-```
-
-This is the only file you need to change to swap in different instructions.
-
----
-
-## Authentication Flow
-
-```
-User opens app
-      ↓
-MSAL initialises + awaits handleRedirectPromise() before first render
-      ↓
-No active session → loginRedirect() fires automatically
-      ↓
-Browser navigates to Microsoft / Azure AD login page
-      ↓
-User authenticates (transparent if already signed into Microsoft in the browser)
-      ↓
-Azure AD redirects back to app with auth code
-      ↓
-MSAL exchanges code for tokens and caches them in sessionStorage
-      ↓
-ID token `groups` claim checked against VITE_AZURE_ALLOWED_GROUP_ID
-      ↓
-✅ Member of group  →  App loads (name + email shown in header)
-🚫 Not in group     →  Access Denied screen with sign-out option
-```
-
-### Group membership — no admin consent required
-
-Group membership is read from the `groups` claim in the Azure AD ID token.
-This requires enabling **Token configuration → Security groups** in the App Registration,
-but does **not** require `GroupMember.Read.All` admin consent.
-
-If the claim is absent (user is in >200 groups — the "overage" scenario),
-the code automatically falls back to the Microsoft Graph `checkMemberGroups` API.
-
----
-
-## API Reference
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/enhance` | Upload OAS + optional Postman; streams SSE enhancement events |
-| `POST` | `/convert` | Upload OAS file; returns Postman Collection v2.1 JSON |
-| `GET` | `/health` | Health check |
-
-### `POST /enhance` — request (multipart/form-data)
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `oas_file` | file | ✅ | OAS spec — `.json`, `.yaml`, or `.yml` |
-| `postman_file` | file | ❌ | Postman Collection v2.1 `.json` |
-| `instructions` | string | ❌ | Additional instructions for the agents |
-
-### `POST /enhance` — SSE event stream
-
-Events are newline-delimited JSON after `data: `:
-
-| Event type | Payload |
-|---|---|
-| `iteration_start` | `{ iteration }` |
-| `review_complete` | `{ iteration, data: { satisfied, summary, suggestions } }` |
-| `enhance_complete` | `{ iteration, data: { changes_made } }` |
-| `done` | `{ original_spec, original_spec_yaml, final_spec, final_spec_yaml, iterations, summary }` |
-| `error` | `{ message }` |
-
-### `POST /convert` — request (multipart/form-data)
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `oas_file` | file | ✅ | OAS spec — `.json`, `.yaml`, or `.yml` |
-
-### `POST /convert` — response
-
-```json
-{
-  "collection": { }
-}
+```bash
+pip install -r requirements.txt
 ```
 
 ---
 
-## ADK Session State Keys
+## Running the App
 
-All agents communicate through ADK session state — no OAS content ever appears in message text.
+You need **two terminals running simultaneously** — one for the backend, one for the frontend.
 
-| Key | Written by | Read by | Description |
-|---|---|---|---|
-| `current_spec` | loop_runner (init), enhancer | reviewer, enhancer | The live OAS spec dict |
-| `postman_json` | loop_runner (init) | reviewer, enhancer | Postman collection string |
-| `has_postman` | loop_runner (init) | reviewer, enhancer | Whether Postman was provided |
-| `review_satisfied` | reviewer | loop_runner | True when no more improvements needed |
-| `review_summary` | reviewer | loop_runner | Overall assessment |
-| `review_suggestions` | reviewer | enhancer, loop_runner | List of actionable improvements |
-| `last_changes` | enhancer | loop_runner | Changes applied in this iteration |
+### Terminal 1 — Start the Backend
+
+```bash
+# From sample-adk-app/ with backend venv activated
+uvicorn backend.server:app --reload --port 8000
+```
+
+Backend starts at `http://localhost:8000`
+API docs available at `http://localhost:8000/docs`
+
+### Terminal 2 — Start the Frontend
+
+```bash
+# From sample-adk-app/flask_ui/ with flask_ui venv activated
+python app.py
+```
+
+Frontend starts at `http://localhost:3000`
+
+Open your browser at **http://localhost:3000**.
 
 ---
 
@@ -444,30 +270,159 @@ All agents communicate through ADK session state — no OAS content ever appears
 
 ### Backend — `backend/.env`
 
-| Variable | Description |
-|---|---|
-| `OPENAI_API_KEY` | OpenAI API key — used for GPT-4.1-mini (reviewer) and GPT-4o (enhancer) |
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | OpenAI API key — used for both reviewer and enhancer model calls |
 
-### Frontend — `frontend/.env`
+### Frontend — shell environment (optional)
 
-| Variable | Description |
-|---|---|
-| `VITE_AZURE_CLIENT_ID` | Azure AD App Registration — Application (client) ID |
-| `VITE_AZURE_TENANT_ID` | Azure AD — Directory (tenant) ID |
-| `VITE_AZURE_ALLOWED_GROUP_ID` | Object ID of the Azure AD security group allowed to access the app |
-| `VITE_REDIRECT_URI` | OAuth redirect URI (default: `http://localhost:5173`) |
+| Variable | Default | Description |
+|---|---|---|
+| `BACKEND_URL` | `http://127.0.0.1:8000` | Override if backend runs on a different host or port |
+
+Set it before starting the frontend:
+
+```bash
+# Windows
+set BACKEND_URL=http://127.0.0.1:8000
+python app.py
+
+# macOS / Linux
+BACKEND_URL=http://127.0.0.1:8000 python app.py
+```
+
+---
+
+## Customising Reviewer Rules
+
+To change what the reviewer checks, edit **only** the `REVIEWER_RULES` block in `backend/agents/prompts.py`:
+
+```python
+REVIEWER_RULES = """
+- Your rule 1
+- Your rule 2
+- Your rule 3
+"""
+```
+
+Everything else — tool call instructions, output format, enhancer prompt — is generated automatically from this block. No other file needs to change.
+
+**Default rules checked:**
+- Missing or empty `description` fields on paths, operations, parameters, schemas, and properties
+- Missing `example` or `examples` on request bodies, responses, and schema properties
+- Missing error responses (400, 401, 403, 404, 409, 422, 500, etc.)
+- Incomplete error response schemas (should have `code`, `message`, `details` fields)
+- Missing or weak schema definitions (no `type`, no `format`, no constraints)
+- Missing `summary` on operations
+- Missing `tags` on operations
+
+---
+
+## API Reference
+
+### `POST /enhance` — upload OAS file, receive SSE stream
+
+**Request** — `multipart/form-data`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `oas_file` | file | Yes | OAS spec — `.json`, `.yaml`, `.yml` (Swagger 2.0 or OAS 3.x) |
+| `postman_file` | file | No | Postman Collection v2.1 `.json` — enables breaking change improvements |
+| `instructions` | string | No | Additional instructions passed to both reviewer and enhancer agents |
+
+**Response** — `text/event-stream` (SSE)
+
+Each event is a line in the format `data: <json>\n\n`
+
+| Event type | Payload | Description |
+|---|---|---|
+| `iteration_start` | `{ iteration }` | A new iteration has begun |
+| `review_complete` | `{ iteration, data: { satisfied, summary, suggestions[] } }` | Reviewer has submitted its findings |
+| `enhance_start` | `{ iteration }` | Enhancer has started applying suggestions |
+| `enhance_complete` | `{ iteration, data: { changes_made[] } }` | Enhancer has saved the updated spec |
+| `done` | `{ original_spec, original_spec_yaml, final_spec, final_spec_yaml, iterations[], original_validation_errors[], validation_errors[], summary }` | Loop finished — full result |
+| `error` | `{ message }` | Unhandled error in the loop |
+
+---
+
+### `POST /convert` — convert OAS to Postman Collection
+
+**Request** — `multipart/form-data`
+
+| Field | Type | Required |
+|---|---|---|
+| `oas_file` | file | Yes |
+
+**Response** — `application/json`
+
+```json
+{
+  "collection": { ... }
+}
+```
+
+Returns a Postman Collection v2.1 JSON object. Conversion is implemented natively in Python — no Node.js or npm dependency.
+
+---
+
+### `GET /health`
+
+Returns `{ "status": "ok" }`. Use this to verify the backend is running before starting the frontend.
+
+---
+
+## State Flow
+
+Each `/enhance` request creates an isolated `state` dict — no shared state between concurrent requests.
+
+| Key | Set by | Used by | Description |
+|---|---|---|---|
+| `current_spec` | Loop init, enhancer | Reviewer, enhancer | Live OAS spec dict — mutated each iteration |
+| `postman_json` | Loop init | Enhancer | Postman collection string (if provided) |
+| `has_postman` | Loop init | Reviewer, enhancer | Controls breaking changes policy |
+| `review_satisfied` | Reviewer | Loop | True when no more improvements needed |
+| `review_summary` | Reviewer | Loop | Overall assessment text |
+| `review_suggestions` | Reviewer | Enhancer | List of actionable improvements for current iteration |
+| `last_changes` | Enhancer | Reviewer (next iter) | Changes applied — passed to reviewer to avoid re-flagging fixed issues |
 
 ---
 
 ## Security Notes
 
-- **No vulnerable npm packages** — OAS→Postman conversion is implemented natively in Python,
-  replacing the vulnerable `openapi-to-postmanv2` npm package (ajv ReDoS, lodash/js-yaml prototype pollution)
-- **`.env` files are git-ignored** — never commit secrets; use `.env.example` as the template
-- **ID token group claims** are used instead of the Graph API to avoid the `GroupMember.Read.All` admin consent requirement
-- **`sessionStorage`** is used for the MSAL token cache — tokens are cleared when the browser tab closes
-- **Session isolation** — each `/enhance` request gets its own ADK session with a unique user ID,
-  so concurrent requests cannot share or leak state
-- **Agent timeout** — each agent run is guarded by a 120-second `asyncio` timeout; if a run
-  exceeds this (e.g. model generating a huge text response instead of calling a tool), the loop
-  moves on with whatever state was already written by tool calls, preventing the UI from freezing
+- **No npm dependencies** — OAS → Postman conversion is implemented natively in Python; no Node.js required
+- **`.env` is git-ignored** — never commit your `OPENAI_API_KEY`
+- **Agent timeout** — each model call is guarded by a 120-second `asyncio` timeout; a timed-out call does not crash the loop
+- **Request isolation** — each `/enhance` request gets its own `state` dict; concurrent requests cannot interfere with each other
+- **Spec sanitization** — the enhancer output is sanitized before being saved: misplaced keys are rescued, invalid fields are stripped, dropped paths are restored from the previous iteration
+
+---
+
+## Troubleshooting
+
+### Backend does not start — `ModuleNotFoundError`
+The virtual environment is not activated or dependencies are not installed.
+```bash
+backend\venv\Scripts\activate        # Windows
+pip install -r backend/requirements.txt
+```
+
+### `openai.AuthenticationError` — Invalid API key
+The `OPENAI_API_KEY` in `backend/.env` is missing or incorrect.
+- Confirm `backend/.env` exists and contains `OPENAI_API_KEY=sk-...`
+- Confirm the key has access to `gpt-4.1` and `gpt-4.1-mini`
+
+### Frontend shows "enhance failed" or no SSE events
+The backend is not running or is unreachable.
+- Confirm the backend is running: `curl http://localhost:8000/health`
+- Confirm `BACKEND_URL` is set correctly if you changed the backend port
+
+### Enhancer returns spec with missing paths
+This is handled automatically — the `_restore_dropped_content` function in `loop_runner.py` back-fills any paths the model dropped. Check the backend logs for `Restored N dropped path(s)` warnings.
+
+### Loop runs 5 iterations but reviewer never reaches `satisfied = true`
+The spec may have deep structural issues that additive-only changes cannot fix.
+- Try uploading a Postman collection alongside the OAS file — this enables the enhancer to make breaking changes (schema alignment)
+- Or add custom instructions in the UI to guide the agents
+
+### `AADSTS` or Azure login errors
+These are unrelated to this project — check `flask_sso_app/` if you are working on the SSO app.
