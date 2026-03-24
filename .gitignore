@@ -208,6 +208,7 @@ __marimo__/
 frontend/node_modules/
 backend/.adk/
 backend/.venv/
+.claude/
 backend/__pycache__/
 backend/Include/
 backend/Lib/

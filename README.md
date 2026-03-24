@@ -28,7 +28,7 @@ Upload an OAS file (JSON or YAML, Swagger 2.0 or OAS 3.x). The app runs a multi-
 
 1. A **Reviewer** agent reads the spec and identifies issues (missing descriptions, examples, error schemas, etc.)
 2. An **Enhancer** agent applies all suggestions and returns the improved spec
-3. The loop repeats up to 5 iterations until the reviewer is satisfied
+3. The loop repeats up to a configurable number of iterations (default: 5) until the reviewer is satisfied
 
 Progress streams live to the browser via Server-Sent Events (SSE). The final enhanced spec is available in both YAML and JSON, with a side-by-side diff against the original.
 
@@ -50,16 +50,16 @@ Flask Frontend  (flask_ui — port 3000)
    │  POST /convert
    ▼
 FastAPI Backend  (backend — port 8000)
-   │  server.py — /enhance (SSE), /convert, /health
+   │  server.py — /enhance (SSE), /convert, /config, /health
    │
-   └── Enhancement Loop  (loop_runner.py — up to 5 iterations)
+   └── Enhancement Loop  (loop_runner.py — configurable iterations via MAX_ITERATIONS)
          │
          ├── Reviewer Agent  (gpt-4.1-mini)
          │     reads current spec + previous changes context
          │     calls submit_review tool
          │     outputs: satisfied, summary, suggestions[]
          │
-         └── Enhancer Agent  (gpt-4.1)
+         └── Enhancer Agent  (gpt-4.1, streamed)
                reads current spec + reviewer suggestions
                calls save_enhanced_spec tool
                outputs: full updated spec, changes_made[]
@@ -79,7 +79,7 @@ Upload OAS file (+ optional Postman collection + optional instructions)
 Parse and validate original spec — record baseline errors
       │
       ▼
-For each iteration (max 5):
+For each iteration (up to MAX_ITERATIONS, default 5):
   │
   ├── 1. Check stall guard — if no improvement for 3 consecutive iterations → stop
   │
@@ -88,7 +88,7 @@ For each iteration (max 5):
   │
   ├── 3. If satisfied = true OR suggestions = [] → stop (reviewer is happy)
   │
-  ├── 4. Enhancer (gpt-4.1) reads spec + all suggestions
+  ├── 4. Enhancer (gpt-4.1, streamed) reads spec + all suggestions
   │         → calls save_enhanced_spec(enhanced_spec, changes_made)
   │
   └── 5. Spec post-processing:
@@ -115,21 +115,22 @@ done event:
 | Agent | Model | Reason |
 |---|---|---|
 | Reviewer | `gpt-4.1-mini` | Only reads spec and outputs a short suggestion list — fast and cost-efficient |
-| Enhancer | `gpt-4.1` | Must read the full spec, apply all changes, and return the **complete modified spec** as a structured tool call — large output task requiring the stronger model |
+| Enhancer | `gpt-4.1` (streamed) | Must read the full spec, apply all changes, and return the **complete modified spec** as a structured tool call — large output task requiring the stronger model. Streamed to keep the connection alive. |
 
 ---
 
 ## Project Structure
 
 ```
-sample-adk-app/
+oas-enhancer-util/
 │
 ├── backend/                        # FastAPI backend
 │   ├── __init__.py
-│   ├── server.py                   # API endpoints: /enhance (SSE), /convert, /health
-│   ├── loop_runner.py              # Multi-agent loop, spec sanitization, SSE event stream
+│   ├── server.py                   # API endpoints: /enhance (SSE), /convert, /config, /health
+│   ├── loop_runner.py              # Multi-agent loop, spec sanitization, SSE event stream, heartbeat
 │   ├── requirements.txt
-│   ├── .env                        # OPENAI_API_KEY — git-ignored, create manually
+│   ├── .env                        # OPENAI_API_KEY (+ MAX_ITERATIONS) — git-ignored, create from .env.example
+│   ├── .env.example                # Template for backend env vars
 │   ├── agents/
 │   │   ├── __init__.py
 │   │   ├── prompts.py              # ← edit REVIEWER_RULES here to change what gets checked
@@ -141,13 +142,14 @@ sample-adk-app/
 ├── flask_ui/                       # Flask frontend
 │   ├── app.py                      # Flask server — UI routes + proxy to backend
 │   ├── requirements.txt
+│   ├── .env                        # BACKEND_URL (+ MAX_ITERATIONS) — git-ignored, create from .env.example
+│   ├── .env.example                # Template for frontend env vars
 │   └── templates/
 │       ├── home.html               # Landing page
 │       └── index.html              # OAS Enhancer single-page app (SSE reader, diff viewer)
 │
 ├── README.md
-├── Dockerfile
-└── start.sh                        # Production startup (uvicorn + Flask)
+└── Dockerfile
 ```
 
 ---
@@ -167,7 +169,7 @@ sample-adk-app/
 
 ```bash
 git clone <your-repo-url>
-cd sample-adk-app
+cd oas-enhancer-util
 ```
 
 ---
@@ -177,7 +179,6 @@ cd sample-adk-app
 #### 2a. Create a virtual environment
 
 ```bash
-# From sample-adk-app/
 python -m venv backend/venv
 
 # Windows
@@ -196,17 +197,14 @@ pip install -r backend/requirements.txt
 #### 2c. Create the environment file
 
 ```bash
-# Windows
-copy NUL backend\.env
-
-# macOS / Linux
-touch backend/.env
+cp backend/.env.example backend/.env
 ```
 
-Open `backend/.env` and add:
+Open `backend/.env` and fill in your values:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-...
+MAX_ITERATIONS=5
 ```
 
 > Get your API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Ensure your account has access to `gpt-4.1` and `gpt-4.1-mini`.
@@ -220,8 +218,7 @@ Open a **new terminal** (keep the backend terminal open).
 #### 3a. Create a virtual environment
 
 ```bash
-cd sample-adk-app/flask_ui
-
+cd flask_ui
 python -m venv venv
 
 # Windows
@@ -237,6 +234,14 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+#### 3c. Create the environment file
+
+```bash
+cp .env.example .env
+```
+
+Edit `flask_ui/.env` if your backend runs on a non-default host/port or you want to change the iteration count shown in the UI.
+
 ---
 
 ## Running the App
@@ -246,7 +251,7 @@ You need **two terminals running simultaneously** — one for the backend, one f
 ### Terminal 1 — Start the Backend
 
 ```bash
-# From sample-adk-app/ with backend venv activated
+# From oas-enhancer-util/ with backend venv activated
 uvicorn backend.server:app --reload --port 8000
 ```
 
@@ -256,7 +261,7 @@ API docs available at `http://localhost:8000/docs`
 ### Terminal 2 — Start the Frontend
 
 ```bash
-# From sample-adk-app/flask_ui/ with flask_ui venv activated
+# From oas-enhancer-util/flask_ui/ with flask_ui venv activated
 python app.py
 ```
 
@@ -270,26 +275,20 @@ Open your browser at **http://localhost:3000**.
 
 ### Backend — `backend/.env`
 
-| Variable | Required | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | Yes | OpenAI API key — used for both reviewer and enhancer model calls |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | Yes | — | OpenAI API key — used for both reviewer and enhancer model calls |
+| `MAX_ITERATIONS` | No | `5` | Maximum number of review → enhance iterations per request (range: 1–20) |
 
-### Frontend — shell environment (optional)
+### Frontend — `flask_ui/.env`
 
-| Variable | Default | Description |
-|---|---|---|
-| `BACKEND_URL` | `http://127.0.0.1:8000` | Override if backend runs on a different host or port |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `BACKEND_URL` | No | `http://127.0.0.1:8000` | Override if backend runs on a different host or port |
+| `MAX_ITERATIONS` | No | `5` | Controls the iteration count displayed in the UI — should match the backend value |
+| `REDUNDANCY_UTIL_URL` | No | `#` | URL for the API Redundancy Util tool card on the home page |
 
-Set it before starting the frontend:
-
-```bash
-# Windows
-set BACKEND_URL=http://127.0.0.1:8000
-python app.py
-
-# macOS / Linux
-BACKEND_URL=http://127.0.0.1:8000 python app.py
-```
+> `MAX_ITERATIONS` must be set consistently in **both** `.env` files so the UI displays the correct value.
 
 ---
 
@@ -320,6 +319,20 @@ Everything else — tool call instructions, output format, enhancer prompt — i
 
 ## API Reference
 
+### `GET /config` — get server configuration
+
+**Response** — `application/json`
+
+```json
+{
+  "max_iterations": 5
+}
+```
+
+Returns the server-side `MAX_ITERATIONS` value. Useful for clients to discover the configured default.
+
+---
+
 ### `POST /enhance` — upload OAS file, receive SSE stream
 
 **Request** — `multipart/form-data`
@@ -329,6 +342,7 @@ Everything else — tool call instructions, output format, enhancer prompt — i
 | `oas_file` | file | Yes | OAS spec — `.json`, `.yaml`, `.yml` (Swagger 2.0 or OAS 3.x) |
 | `postman_file` | file | No | Postman Collection v2.1 `.json` — enables breaking change improvements |
 | `instructions` | string | No | Additional instructions passed to both reviewer and enhancer agents |
+| `max_iterations` | integer | No | Override max iterations for this request (default: server `MAX_ITERATIONS`) |
 
 **Response** — `text/event-stream` (SSE)
 
@@ -340,6 +354,7 @@ Each event is a line in the format `data: <json>\n\n`
 | `review_complete` | `{ iteration, data: { satisfied, summary, suggestions[] } }` | Reviewer has submitted its findings |
 | `enhance_start` | `{ iteration }` | Enhancer has started applying suggestions |
 | `enhance_complete` | `{ iteration, data: { changes_made[] } }` | Enhancer has saved the updated spec |
+| `heartbeat` | `{}` | Keepalive ping sent every 5 seconds during LLM processing — safe to ignore |
 | `done` | `{ original_spec, original_spec_yaml, final_spec, final_spec_yaml, iterations[], original_validation_errors[], validation_errors[], summary }` | Loop finished — full result |
 | `error` | `{ message }` | Unhandled error in the loop |
 
@@ -391,6 +406,8 @@ Each `/enhance` request creates an isolated `state` dict — no shared state bet
 
 - **No npm dependencies** — OAS → Postman conversion is implemented natively in Python; no Node.js required
 - **`.env` is git-ignored** — never commit your `OPENAI_API_KEY`
+- **Streamed enhancer** — the enhancer uses `stream=True` on the OpenAI call so tokens flow continuously; this prevents proxy/browser timeouts on large specs
+- **SSE heartbeat** — a keepalive ping is sent every 5 seconds while the LLM is processing, preventing the browser from treating the connection as frozen
 - **Agent timeout** — each model call is guarded by a 120-second `asyncio` timeout; a timed-out call does not crash the loop
 - **Request isolation** — each `/enhance` request gets its own `state` dict; concurrent requests cannot interfere with each other
 - **Spec sanitization** — the enhancer output is sanitized before being saved: misplaced keys are rescued, invalid fields are stripped, dropped paths are restored from the previous iteration
@@ -414,15 +431,21 @@ The `OPENAI_API_KEY` in `backend/.env` is missing or incorrect.
 ### Frontend shows "enhance failed" or no SSE events
 The backend is not running or is unreachable.
 - Confirm the backend is running: `curl http://localhost:8000/health`
-- Confirm `BACKEND_URL` is set correctly if you changed the backend port
+- Confirm `BACKEND_URL` is set correctly in `flask_ui/.env` if you changed the backend port
+
+### UI iteration count doesn't match backend
+`MAX_ITERATIONS` must be set to the same value in both `backend/.env` and `flask_ui/.env`. The UI reads it from the Flask env at page load; the backend enforces it during processing.
+
+### Enhancer is slow or appears to hang
+The enhancer uses `gpt-4.1` with up to 32K output tokens — large specs can take 30–90 seconds per iteration. This is expected behaviour. The SSE heartbeat keeps the connection alive throughout. If you need faster results:
+- Reduce `MAX_ITERATIONS` in your `.env` files
+- The reviewer will stop early automatically once the spec is satisfactory
 
 ### Enhancer returns spec with missing paths
 This is handled automatically — the `_restore_dropped_content` function in `loop_runner.py` back-fills any paths the model dropped. Check the backend logs for `Restored N dropped path(s)` warnings.
 
-### Loop runs 5 iterations but reviewer never reaches `satisfied = true`
+### Loop runs all iterations but reviewer never reaches `satisfied = true`
 The spec may have deep structural issues that additive-only changes cannot fix.
 - Try uploading a Postman collection alongside the OAS file — this enables the enhancer to make breaking changes (schema alignment)
 - Or add custom instructions in the UI to guide the agents
-
-### `AADSTS` or Azure login errors
-These are unrelated to this project — check `flask_sso_app/` if you are working on the SSO app.
+- Reduce `MAX_ITERATIONS` to limit processing time while you iterate on the spec

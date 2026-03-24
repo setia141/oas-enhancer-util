@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
-from .loop_runner import init_client, run_enhancement_loop   # noqa: E402
+from .loop_runner import init_client, run_enhancement_loop, MAX_ITERATIONS   # noqa: E402
 from .tools.oas_to_postman import oas_to_postman             # noqa: E402
 
 
@@ -45,11 +45,18 @@ def _to_json_str(content: bytes, filename: str) -> str:
     return text
 
 
+@app.get("/config")
+async def get_config():
+    """Returns server-side configuration visible to the UI."""
+    return {"max_iterations": MAX_ITERATIONS}
+
+
 @app.post("/enhance")
 async def enhance_oas(
     oas_file: UploadFile = File(...),
     postman_file: UploadFile = File(None),
     instructions: str = Form(""),
+    max_iterations: int = Form(MAX_ITERATIONS),
 ):
     """
     Streams SSE events for the review→enhance loop (max 5 iterations).
@@ -76,7 +83,7 @@ async def enhance_oas(
 
     async def event_stream():
         try:
-            async for event in run_enhancement_loop(oas_json, postman_json, instructions, has_postman):
+            async for event in run_enhancement_loop(oas_json, postman_json, instructions, has_postman, max_iterations):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

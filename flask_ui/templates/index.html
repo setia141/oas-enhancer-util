@@ -203,6 +203,14 @@
         <textarea id="instructions" rows="3" placeholder="e.g. Focus on POST endpoints, add error response examples, use realistic data..."></textarea>
       </div>
 
+      <div class="field">
+        <label>Max Iterations</label>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px">
+          <span style="font-size:16px">🔁</span>
+          <span style="font-size:13px;color:#555">Your spec will go through up to <strong style="color:#4285f4">{{ max_iterations }}</strong> rounds of AI review and enhancement for the best results.</span>
+        </div>
+      </div>
+
       <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Enhance OAS</button>
     </div>
   </div>
@@ -211,7 +219,7 @@
   <div id="phase-running" class="progress-card" style="display:none">
     <div class="progress-header">
       <h2>✨ Enhancing your OAS spec</h2>
-      <p>AI review → enhance loop · up to 5 iterations</p>
+      <p id="progress-subtitle">AI review → enhance loop · up to 5 iterations</p>
     </div>
     <div class="progress-body" id="progress-body"></div>
   </div>
@@ -265,7 +273,7 @@ let state = {
   result: null,
 }
 
-const MAX_ITERATIONS = 5
+const MAX_ITERATIONS = {{ max_iterations }}
 const SUGGESTIONS_PREVIEW = 3
 const CHANGES_PREVIEW = 4
 
@@ -346,6 +354,10 @@ function removePostman() {
 // ── Submit ─────────────────────────────────────────────────────────
 async function handleSubmit() {
   if (!state.oasFile) return
+
+  document.getElementById('progress-subtitle').textContent =
+    `AI review → enhance loop · up to ${MAX_ITERATIONS} iteration${MAX_ITERATIONS !== 1 ? 's' : ''}`
+
   state.originalFilename = state.oasFile.name
   state.currentIteration = 0
   state.currentStep = 'reviewing'
@@ -360,6 +372,7 @@ async function handleSubmit() {
   if (state.postmanFile) form.append('postman_file', state.postmanFile)
   const instructions = document.getElementById('instructions').value.trim()
   if (instructions) form.append('instructions', instructions)
+  form.append('max_iterations', String(MAX_ITERATIONS))
 
   try {
     const resp = await fetch('/enhance', { method:'POST', body:form })
@@ -392,6 +405,7 @@ async function handleSubmit() {
 
 // ── SSE Event handler ──────────────────────────────────────────────
 function handleEvent(event) {
+  if (event.type === 'heartbeat') return  // keepalive ping — ignore
   if (event.type === 'error') {
     document.getElementById('error-msg').textContent = '⚠ ' + event.message
     showPhase('error')

@@ -1,10 +1,12 @@
 """
-Orchestrates the review → enhance loop (max 5 iterations) using the OpenAI API directly.
+Orchestrates the review → enhance loop using the OpenAI API directly.
+Max iterations is configurable via MAX_ITERATIONS env var (default 5).
 Yields SSE-ready dicts for streaming to the frontend.
 """
 import asyncio
 import json
 import logging
+import os
 from typing import AsyncGenerator
 
 import yaml
@@ -16,7 +18,7 @@ from .agents.tools import REVIEWER_TOOLS, ENHANCER_TOOLS, get_breaking_changes_p
 
 logger = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 5))
 AGENT_TIMEOUT  = 120        # seconds per agent call
 REVIEWER_MODEL = "gpt-4.1-mini"
 ENHANCER_MODEL = "gpt-4.1"
@@ -204,7 +206,8 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
         user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
 
     try:
-        response = await asyncio.wait_for(
+        # Stream the response so tokens flow continuously — avoids long silences on large specs
+        stream = await asyncio.wait_for(
             _client.chat.completions.create(
                 model=ENHANCER_MODEL,
                 messages=[
@@ -214,15 +217,31 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
                 tools=ENHANCER_TOOLS,
                 tool_choice={"type": "function", "function": {"name": "save_enhanced_spec"}},
                 max_tokens=32768,
+                stream=True,
             ),
-            timeout=AGENT_TIMEOUT,
+            timeout=30,  # timeout just for establishing the connection
         )
-        choice = response.choices[0]
-        if not choice.message.tool_calls:
-            logger.warning("Iteration %d — enhancer returned no tool call (finish_reason=%s)", iteration, choice.finish_reason)
+
+        # Accumulate streamed tool-call argument chunks
+        arguments     = ""
+        finish_reason = None
+        async for chunk in stream:
+            choice_delta = chunk.choices[0]
+            if choice_delta.delta.tool_calls:
+                for tc in choice_delta.delta.tool_calls:
+                    if tc.function and tc.function.arguments:
+                        arguments += tc.function.arguments
+            if choice_delta.finish_reason:
+                finish_reason = choice_delta.finish_reason
+
+        logger.info("Iteration %d — enhancer stream complete, finish_reason=%s, args_len=%d",
+                    iteration, finish_reason, len(arguments))
+
+        if not arguments:
+            logger.warning("Iteration %d — enhancer returned no tool call arguments (finish_reason=%s)", iteration, finish_reason)
             return {"enhanced_spec": state["current_spec"], "changes_made": [], "validation_errors": []}
 
-        args     = json.loads(choice.message.tool_calls[0].function.arguments)
+        args     = json.loads(arguments)
         enhanced = args.get("enhanced_spec", state["current_spec"])
 
         if isinstance(enhanced, str):
@@ -261,13 +280,31 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
     return {"enhanced_spec": state["current_spec"], "changes_made": [], "validation_errors": []}
 
 
+# ── Heartbeat helper ───────────────────────────────────────────────────────────
+
+HEARTBEAT_INTERVAL = 5  # seconds between keepalive pings
+
+async def _await_with_heartbeat(coro):
+    """
+    Runs a coroutine while yielding heartbeat dicts every HEARTBEAT_INTERVAL seconds.
+    Prevents the browser / proxy from treating the SSE connection as frozen.
+    """
+    task = asyncio.create_task(coro)
+    while not task.done():
+        done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL)
+        if not done:
+            yield {"type": "heartbeat"}
+    yield task.result()
+
+
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
 async def run_enhancement_loop(
-    oas_json:     str,
-    postman_json: str | None,
-    instructions: str,
-    has_postman:  bool,
+    oas_json:       str,
+    postman_json:   str | None,
+    instructions:   str,
+    has_postman:    bool,
+    max_iterations: int = MAX_ITERATIONS,
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator yielding SSE event dicts:
@@ -299,7 +336,8 @@ async def run_enhancement_loop(
     prev_suggestion_count: int        = -1
     stalled_iterations:    int        = 0
 
-    for i in range(MAX_ITERATIONS):
+    max_iterations = max(1, min(max_iterations, 20))  # clamp 1–20
+    for i in range(max_iterations):
         iteration = i + 1
 
         # ── Stall check before reviewer — prevents showing suggestions that won't be actioned ──
@@ -310,7 +348,11 @@ async def run_enhancement_loop(
         yield {"type": "iteration_start", "iteration": iteration}
 
         # ── Reviewer ──────────────────────────────────────────────
-        review = await _run_reviewer(state, instructions, iteration)
+        async for _hb in _await_with_heartbeat(_run_reviewer(state, instructions, iteration)):
+            if _hb.get("type") == "heartbeat":
+                yield _hb
+            else:
+                review = _hb
         state["review_satisfied"]   = review["satisfied"]
         state["review_summary"]     = review["summary"]
         state["review_suggestions"] = review["suggestions"]
@@ -324,7 +366,11 @@ async def run_enhancement_loop(
 
         # ── Enhancer — always runs if reviewer gave suggestions ────
         yield {"type": "enhance_start", "iteration": iteration}
-        result = await _run_enhancer(state, iteration)
+        async for _hb in _await_with_heartbeat(_run_enhancer(state, iteration)):
+            if _hb.get("type") == "heartbeat":
+                yield _hb
+            else:
+                result = _hb
         state["current_spec"] = result["enhanced_spec"]
         state["last_changes"] = result["changes_made"]
         logger.info("Iteration %d — spec updated, next reviewer will see %d paths",
