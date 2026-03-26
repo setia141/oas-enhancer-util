@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from typing import AsyncGenerator
 
 import yaml
@@ -18,14 +19,15 @@ from .agents.tools import REVIEWER_TOOLS, ENHANCER_TOOLS, get_breaking_changes_p
 
 logger = logging.getLogger(__name__)
 
-MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 5))
-AGENT_TIMEOUT  = 120        # seconds per agent call
-REVIEWER_MODEL = "gpt-4.1-mini"
-ENHANCER_MODEL = "gpt-4.1"
+MAX_ITERATIONS     = int(os.environ.get("MAX_ITERATIONS", 5))
+REVIEWER_TIMEOUT   = 120   # seconds
+ENHANCER_TIMEOUT   = 300   # seconds — large specs can take time
+HEARTBEAT_INTERVAL = 5     # seconds between SSE keepalive pings
+REVIEWER_MODEL     = "gpt-4.1-mini"
+ENHANCER_MODEL     = "gpt-4.1"
 
-_OAS_TOP_LEVEL      = {"openapi", "info", "servers", "paths", "components", "security", "tags", "externalDocs"}
-_HTTP_METHODS       = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
-_SWAGGER2_OP_FIELDS = {"produces", "consumes"}   # Swagger 2.0 fields invalid in OAS 3.x
+_OAS_TOP_LEVEL = {"openapi", "info", "servers", "paths", "components", "security", "tags", "externalDocs"}
+_HTTP_METHODS  = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
 _client: AsyncOpenAI | None = None
 
@@ -33,40 +35,33 @@ _client: AsyncOpenAI | None = None
 # ── Spec post-processing ───────────────────────────────────────────────────────
 
 def _sanitize_spec(spec: dict) -> dict:
-    """Fix model-injected structural mistakes before saving the enhanced spec."""
-    # Rescue path items the model placed at the top level instead of inside paths
+    """Fix common model mistakes in the returned spec."""
+    # Move paths accidentally placed at the top level into paths dict
     for k in [k for k in list(spec.keys()) if k.startswith("/")]:
-        logger.warning("Moving misplaced path from top-level into paths: %s", k)
+        logger.warning("Moving misplaced top-level path into paths: %s", k)
         spec.setdefault("paths", {})[k] = spec.pop(k)
 
-    # Remove non-OAS top-level keys (e.g. changes_made accidentally embedded in spec)
+    # Remove junk top-level keys the model sometimes adds (e.g. "changes_made")
     for k in [k for k in list(spec.keys()) if k not in _OAS_TOP_LEVEL and not k.startswith("x-")]:
-        logger.warning("Stripping non-OAS top-level key: %s", k)
+        logger.warning("Removing unexpected top-level key: %s", k)
         del spec[k]
 
-    # Remove non-path entries from paths dict
+    # Remove non-path keys from paths dict — but preserve x- extensions
     if isinstance(spec.get("paths"), dict):
-        for k in [k for k in list(spec["paths"].keys()) if not k.startswith("/")]:
-            logger.warning("Stripping non-path key from paths dict: %s", k)
+        for k in [k for k in list(spec["paths"].keys())
+                  if not k.startswith("/") and not k.startswith("x-")]:
+            logger.warning("Removing non-path key from paths: %s", k)
             del spec["paths"][k]
-
-    # Strip Swagger 2.0 operation fields that are invalid in OAS 3.x
-    if str(spec.get("openapi", "")).startswith("3."):
-        for path_item in spec.get("paths", {}).values():
-            if not isinstance(path_item, dict):
-                continue
-            for method, operation in path_item.items():
-                if method not in _HTTP_METHODS or not isinstance(operation, dict):
-                    continue
-                for field in _SWAGGER2_OP_FIELDS & operation.keys():
-                    logger.warning("Stripping Swagger 2.0 field '%s' from %s operation", field, method)
-                    del operation[field]
 
     return spec
 
 
-def _restore_dropped_content(original: dict, enhanced: dict) -> dict:
-    """Back-fill any paths/operations the model dropped. Enhanced content takes priority."""
+def _restore_dropped_paths(original: dict, enhanced: dict) -> dict:
+    """
+    Re-insert any paths or operations the model omitted from its output.
+    Models sometimes truncate large specs — this ensures no endpoints are lost.
+    Enhanced content takes priority; we only fill in what's missing.
+    """
     for key, value in original.items():
         if key not in enhanced:
             enhanced[key] = value
@@ -88,39 +83,14 @@ def _restore_dropped_content(original: dict, enhanced: dict) -> dict:
     return enhanced
 
 
-def _fix_duplicate_operation_ids(spec: dict) -> dict:
-    """Rename any duplicate operationIds by appending _2, _3, … to disambiguate."""
-    seen: dict[str, int] = {}
-    for path_item in spec.get("paths", {}).values():
-        if not isinstance(path_item, dict):
-            continue
-        for method, operation in path_item.items():
-            if method not in _HTTP_METHODS or not isinstance(operation, dict):
-                continue
-            op_id = operation.get("operationId")
-            if not op_id:
-                continue
-            if op_id in seen:
-                seen[op_id] += 1
-                new_id = f"{op_id}_{seen[op_id]}"
-                logger.warning("Duplicate operationId '%s' → renamed to '%s'", op_id, new_id)
-                operation["operationId"] = new_id
-            else:
-                seen[op_id] = 1
-    return spec
-
-
 def _validate_spec(spec: dict, label: str) -> list[str]:
-    """Validate spec against its declared OAS/Swagger version. Returns list of error strings (empty = valid)."""
+    """Returns list of OAS validation error strings (empty = valid)."""
     try:
         _oas_validate(spec)
-        logger.info("%s passed OAS validation", label)
         return []
     except Exception as exc:
         errors = str(exc).splitlines()
-        logger.warning("%s has %d OAS validation error(s):", label, len(errors))
-        for e in errors[:10]:
-            logger.warning("  %s", e)
+        logger.warning("%s: %d OAS validation error(s)", label, len(errors))
         return errors
 
 
@@ -129,14 +99,15 @@ def _validate_spec(spec: dict, label: str) -> list[str]:
 def init_client() -> None:
     global _client
     _client = AsyncOpenAI()
-    logger.info("OpenAI client initialised (reviewer=%s, enhancer=%s).", REVIEWER_MODEL, ENHANCER_MODEL)
+    logger.info("OpenAI client ready — reviewer=%s, enhancer=%s", REVIEWER_MODEL, ENHANCER_MODEL)
 
 
 # ── Agent calls ────────────────────────────────────────────────────────────────
 
 async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
     spec_json = json.dumps(state["current_spec"], indent=2)
-    logger.info("Iteration %d — reviewer sees spec of %d bytes", iteration, len(spec_json))
+    logger.info("Iter %d | reviewer starting — %d bytes, %d paths",
+                iteration, len(spec_json), len(state["current_spec"].get("paths", {})))
 
     user_content = (
         f"Iteration {iteration}: Review the OAS specification below.\n\n"
@@ -154,6 +125,7 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
             + "\nOnly flag issues still present in the spec above."
         )
 
+    t0 = time.monotonic()
     try:
         response = await asyncio.wait_for(
             _client.chat.completions.create(
@@ -165,27 +137,28 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
                 tools=REVIEWER_TOOLS,
                 tool_choice={"type": "function", "function": {"name": "submit_review"}},
             ),
-            timeout=AGENT_TIMEOUT,
+            timeout=REVIEWER_TIMEOUT,
         )
-        choice = response.choices[0]
+        elapsed = time.monotonic() - t0
+        choice  = response.choices[0]
+
         if not choice.message.tool_calls:
-            logger.warning("Iteration %d — reviewer returned no tool call (finish_reason=%s)", iteration, choice.finish_reason)
+            logger.warning("Iter %d | reviewer returned no tool call (finish_reason=%s, %.1fs)",
+                           iteration, choice.finish_reason, elapsed)
             return {"satisfied": False, "summary": "", "suggestions": []}
 
-        args        = json.loads(choice.message.tool_calls[0].function.arguments)
-        suggestions = args.get("suggestions", [])
-        logger.info("Iteration %d — reviewer: satisfied=%s, suggestions=%d", iteration, args.get("satisfied"), len(suggestions))
-        for i, s in enumerate(suggestions, 1):
-            logger.info("Iteration %d — suggestion %d: %s", iteration, i, s)
+        args = json.loads(choice.message.tool_calls[0].function.arguments)
+        logger.info("Iter %d | reviewer done in %.1fs — satisfied=%s, %d suggestion(s)",
+                    iteration, elapsed, args.get("satisfied"), len(args.get("suggestions", [])))
         return {
             "satisfied":   bool(args.get("satisfied", False)),
             "summary":     args.get("summary", ""),
-            "suggestions": suggestions,
+            "suggestions": args.get("suggestions", []),
         }
     except asyncio.TimeoutError:
-        logger.warning("Iteration %d — reviewer timed out after %ds", iteration, AGENT_TIMEOUT)
+        logger.error("Iter %d | reviewer timed out after %ds", iteration, REVIEWER_TIMEOUT)
     except Exception as e:
-        logger.error("Iteration %d — reviewer error: %s", iteration, e)
+        logger.error("Iter %d | reviewer error: %s", iteration, e, exc_info=True)
 
     return {"satisfied": False, "summary": "", "suggestions": []}
 
@@ -194,6 +167,8 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
     spec_json   = json.dumps(state["current_spec"], indent=2)
     suggestions = state.get("review_suggestions", [])
     path_count  = len(state["current_spec"].get("paths", {}))
+    logger.info("Iter %d | enhancer starting — %d bytes, %d paths, %d suggestion(s)",
+                iteration, len(spec_json), path_count, len(suggestions))
 
     user_content = (
         f"CRITICAL — BREAKING CHANGES POLICY (obey strictly): {get_breaking_changes_policy(state)}\n\n"
@@ -205,9 +180,9 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
     if state.get("postman_json"):
         user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
 
+    t0 = time.monotonic()
     try:
-        # Stream the response so tokens flow continuously — avoids long silences on large specs
-        stream = await asyncio.wait_for(
+        response = await asyncio.wait_for(
             _client.chat.completions.create(
                 model=ENHANCER_MODEL,
                 messages=[
@@ -217,78 +192,53 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
                 tools=ENHANCER_TOOLS,
                 tool_choice={"type": "function", "function": {"name": "save_enhanced_spec"}},
                 max_tokens=32768,
-                stream=True,
             ),
-            timeout=30,  # timeout just for establishing the connection
+            timeout=ENHANCER_TIMEOUT,
         )
+        elapsed = time.monotonic() - t0
+        choice  = response.choices[0]
 
-        # Accumulate streamed tool-call argument chunks
-        arguments     = ""
-        finish_reason = None
-        async for chunk in stream:
-            choice_delta = chunk.choices[0]
-            if choice_delta.delta.tool_calls:
-                for tc in choice_delta.delta.tool_calls:
-                    if tc.function and tc.function.arguments:
-                        arguments += tc.function.arguments
-            if choice_delta.finish_reason:
-                finish_reason = choice_delta.finish_reason
+        if not choice.message.tool_calls:
+            logger.warning("Iter %d | enhancer returned no tool call (finish_reason=%s, %.1fs)",
+                           iteration, choice.finish_reason, elapsed)
+            return {"enhanced_spec": state["current_spec"], "changes_made": []}
 
-        logger.info("Iteration %d — enhancer stream complete, finish_reason=%s, args_len=%d",
-                    iteration, finish_reason, len(arguments))
-
-        if not arguments:
-            logger.warning("Iteration %d — enhancer returned no tool call arguments (finish_reason=%s)", iteration, finish_reason)
-            return {"enhanced_spec": state["current_spec"], "changes_made": [], "validation_errors": []}
-
-        args     = json.loads(arguments)
+        args     = json.loads(choice.message.tool_calls[0].function.arguments)
         enhanced = args.get("enhanced_spec", state["current_spec"])
 
         if isinstance(enhanced, str):
             try:
                 enhanced = json.loads(enhanced)
             except Exception:
-                logger.warning("Iteration %d — enhanced_spec was unparseable string; keeping original", iteration)
-                enhanced = state["current_spec"]
+                logger.warning("Iter %d | enhanced_spec was not valid JSON — keeping original", iteration)
+                return {"enhanced_spec": state["current_spec"], "changes_made": []}
 
-        before_paths = len(state["current_spec"].get("paths", {}))
-        enhanced     = _sanitize_spec(enhanced)
-        enhanced     = _restore_dropped_content(state["current_spec"], enhanced)
-        enhanced     = _fix_duplicate_operation_ids(enhanced)
-        after_paths  = len(enhanced.get("paths", {}))
-        changes      = args.get("changes_made", [])
+        enhanced = _sanitize_spec(enhanced)
+        enhanced = _restore_dropped_paths(state["current_spec"], enhanced)
+        changes  = args.get("changes_made", [])
 
-        spec_changed      = json.dumps(enhanced, sort_keys=True) != json.dumps(state["current_spec"], sort_keys=True)
-        validation_errors = _validate_spec(enhanced, f"Iteration {iteration}")
-        logger.info("Iteration %d — enhancer: %d changes, spec_changed=%s, valid=%s, paths %d→%d",
-                    iteration, len(changes), spec_changed, not validation_errors, before_paths, after_paths)
+        spec_changed = json.dumps(enhanced, sort_keys=True) != json.dumps(state["current_spec"], sort_keys=True)
+        logger.info("Iter %d | enhancer done in %.1fs — %d change(s), paths %d→%d, spec_changed=%s",
+                    iteration, elapsed, len(changes),
+                    path_count, len(enhanced.get("paths", {})), spec_changed)
+
         if not spec_changed:
-            logger.warning("Iteration %d — enhancer returned the original spec unchanged", iteration)
-        if spec_changed and not changes:
-            logger.warning("Iteration %d — enhancer modified the spec but reported 0 changes_made; "
-                           "reviewer will have no context for next iteration", iteration)
-        logger.debug("Iteration %d — enhanced spec after sanitization:\n%s",
-                     iteration, json.dumps(enhanced, indent=2))
+            logger.warning("Iter %d | enhancer returned spec unchanged", iteration)
 
-        return {"enhanced_spec": enhanced, "changes_made": changes, "validation_errors": validation_errors}
+        return {"enhanced_spec": enhanced, "changes_made": changes}
 
     except asyncio.TimeoutError:
-        logger.warning("Iteration %d — enhancer timed out after %ds", iteration, AGENT_TIMEOUT)
+        logger.error("Iter %d | enhancer timed out after %ds", iteration, ENHANCER_TIMEOUT)
     except Exception as e:
-        logger.error("Iteration %d — enhancer error: %s", iteration, e)
+        logger.error("Iter %d | enhancer error: %s", iteration, e, exc_info=True)
 
-    return {"enhanced_spec": state["current_spec"], "changes_made": [], "validation_errors": []}
+    return {"enhanced_spec": state["current_spec"], "changes_made": []}
 
 
 # ── Heartbeat helper ───────────────────────────────────────────────────────────
 
-HEARTBEAT_INTERVAL = 5  # seconds between keepalive pings
-
 async def _await_with_heartbeat(coro):
-    """
-    Runs a coroutine while yielding heartbeat dicts every HEARTBEAT_INTERVAL seconds.
-    Prevents the browser / proxy from treating the SSE connection as frozen.
-    """
+    """Run a coroutine, yielding heartbeat pings every HEARTBEAT_INTERVAL seconds."""
     task = asyncio.create_task(coro)
     while not task.done():
         done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL)
@@ -306,28 +256,24 @@ async def run_enhancement_loop(
     has_postman:    bool,
     max_iterations: int = MAX_ITERATIONS,
 ) -> AsyncGenerator[dict, None]:
-    """
-    Async generator yielding SSE event dicts:
-      iteration_start  { iteration }
-      review_complete  { iteration, data: {satisfied, summary, suggestions} }
-      enhance_start    { iteration }
-      enhance_complete { iteration, data: {changes_made} }
-      done             { original_spec, original_spec_yaml, final_spec, final_spec_yaml, iterations, validation_errors, summary }
-    """
-    assert _client, "OpenAI client not initialised — call init_client() first"
+    if not _client:
+        raise RuntimeError("OpenAI client not initialised — call init_client() first")
 
     current_spec  = json.loads(oas_json) if isinstance(oas_json, str) else oas_json
     original_spec = json.loads(json.dumps(current_spec))  # deep copy
 
-    original_validation = _validate_spec(original_spec, "Original spec")
+    path_count = len(current_spec.get("paths", {}))
+    spec_title = current_spec.get("info", {}).get("title", "untitled")
+    logger.info("Loop starting — %r, %d paths, %d bytes, max_iterations=%d, has_postman=%s",
+                spec_title, path_count, len(oas_json), max_iterations, has_postman)
+
+    original_validation = _validate_spec(original_spec, "original spec")
 
     state: dict = {
         "current_spec":       current_spec,
         "postman_json":       postman_json,
         "has_postman":        has_postman,
         "review_suggestions": [],
-        "review_satisfied":   False,
-        "review_summary":     "",
         "last_changes":       [],
     }
 
@@ -335,46 +281,45 @@ async def run_enhancement_loop(
     last_review:           dict       = {}
     prev_suggestion_count: int        = -1
     stalled_iterations:    int        = 0
+    loop_start             = time.monotonic()
 
-    max_iterations = max(1, min(max_iterations, 20))  # clamp 1–20
+    max_iterations = max(1, min(max_iterations, 20))
     for i in range(max_iterations):
         iteration = i + 1
 
-        # ── Stall check before reviewer — prevents showing suggestions that won't be actioned ──
         if stalled_iterations >= 3:
-            logger.info("Iteration %d — stopping: no improvement for 3 consecutive iterations", iteration)
+            logger.info("Stopping — no improvement for 3 consecutive iterations")
             break
 
         yield {"type": "iteration_start", "iteration": iteration}
 
-        # ── Reviewer ──────────────────────────────────────────────
+        # ── Reviewer ──────────────────────────────────────────────────────────
         async for _hb in _await_with_heartbeat(_run_reviewer(state, instructions, iteration)):
             if _hb.get("type") == "heartbeat":
                 yield _hb
             else:
                 review = _hb
-        state["review_satisfied"]   = review["satisfied"]
-        state["review_summary"]     = review["summary"]
+
         state["review_suggestions"] = review["suggestions"]
         last_review = review
 
         yield {"type": "review_complete", "iteration": iteration, "data": review}
 
         if review["satisfied"] or not review["suggestions"]:
-            logger.info("Iteration %d — stopping: reviewer satisfied", iteration)
+            logger.info("Iter %d | reviewer satisfied, stopping", iteration)
             break
 
-        # ── Enhancer — always runs if reviewer gave suggestions ────
+        # ── Enhancer ──────────────────────────────────────────────────────────
         yield {"type": "enhance_start", "iteration": iteration}
+
         async for _hb in _await_with_heartbeat(_run_enhancer(state, iteration)):
             if _hb.get("type") == "heartbeat":
                 yield _hb
             else:
                 result = _hb
+
         state["current_spec"] = result["enhanced_spec"]
         state["last_changes"] = result["changes_made"]
-        logger.info("Iteration %d — spec updated, next reviewer will see %d paths",
-                    iteration, len(state["current_spec"].get("paths", {})))
 
         all_iterations.append({
             "iteration":      iteration,
@@ -382,33 +327,41 @@ async def run_enhancement_loop(
             "suggestions":    review["suggestions"],
             "changes_made":   result["changes_made"],
         })
-        yield {"type": "enhance_complete", "iteration": iteration, "data": {"changes_made": result["changes_made"]}}
+        yield {"type": "enhance_complete", "iteration": iteration,
+               "data": {"changes_made": result["changes_made"]}}
 
-        # ── Update stall tracking after enhancer ran ───────────────
+        # Stop if suggestions are not decreasing across iterations
         suggestion_count = len(review["suggestions"])
         if prev_suggestion_count > 0 and suggestion_count >= prev_suggestion_count:
             stalled_iterations += 1
+            logger.warning("Stall detected — suggestions %d → %d (stall count %d/3)",
+                           prev_suggestion_count, suggestion_count, stalled_iterations)
         else:
             stalled_iterations = 0
         prev_suggestion_count = suggestion_count
 
+    total_elapsed = time.monotonic() - loop_start
+
     def _to_yaml(spec: dict) -> str:
         return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
-    # Skip re-validation when the enhancer never ran (spec is identical to original)
     final_validation = (
-        _validate_spec(state["current_spec"], "Final spec")
+        _validate_spec(state["current_spec"], "final spec")
         if all_iterations else original_validation
     )
-    total_changes    = sum(len(it["changes_made"]) for it in all_iterations)
+    total_changes = sum(len(it["changes_made"]) for it in all_iterations)
+
+    logger.info("Loop done — %d iteration(s), %d change(s), %.1fs, validation errors: %d → %d",
+                len(all_iterations), total_changes, total_elapsed,
+                len(original_validation), len(final_validation))
 
     yield {
-        "type":               "done",
-        "original_spec":      original_spec,
-        "original_spec_yaml": _to_yaml(original_spec),
-        "final_spec":         state["current_spec"],
-        "final_spec_yaml":    _to_yaml(state["current_spec"]),
-        "iterations":                all_iterations,
+        "type":                       "done",
+        "original_spec":              original_spec,
+        "original_spec_yaml":         _to_yaml(original_spec),
+        "final_spec":                 state["current_spec"],
+        "final_spec_yaml":            _to_yaml(state["current_spec"]),
+        "iterations":                 all_iterations,
         "original_validation_errors": original_validation,
         "validation_errors":          final_validation,
         "summary": {
