@@ -284,8 +284,28 @@ function showPhase(name) {
   })
 }
 
+let _timerInterval = null
+
+function _startEnhancingTimer() {
+  clearInterval(_timerInterval)
+  _timerInterval = setInterval(() => {
+    const el = document.getElementById('enhancing-timer')
+    if (!el) { clearInterval(_timerInterval); return }
+    const secs = Math.floor((Date.now() - state.enhancingStartedAt) / 1000)
+    el.textContent = secs + 's'
+  }, 1000)
+}
+
+function _updateActivityDot() {
+  const el = document.getElementById('enhancing-status')
+  if (!el) return
+  el.style.opacity = '0.4'
+  setTimeout(() => { if (el) el.style.opacity = '1' }, 300)
+}
+
 function resetAll() {
-  state = { oasFile:null, postmanFile:null, originalFilename:'', currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null }
+  clearInterval(_timerInterval)
+  state = { oasFile:null, postmanFile:null, originalFilename:'', currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null, enhancingStartedAt:null, lastHeartbeat:null }
   document.getElementById('progress-body').innerHTML = ''
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''
@@ -405,7 +425,11 @@ async function handleSubmit() {
 
 // ── SSE Event handler ──────────────────────────────────────────────
 function handleEvent(event) {
-  if (event.type === 'heartbeat') return  // keepalive ping — ignore
+  if (event.type === 'heartbeat') {
+    state.lastHeartbeat = Date.now()
+    _updateActivityDot()
+    return
+  }
   if (event.type === 'error') {
     document.getElementById('error-msg').textContent = '⚠ ' + event.message
     showPhase('error')
@@ -422,7 +446,9 @@ function handleEvent(event) {
   }
   if (event.type === 'enhance_start') {
     state.currentStep = 'enhancing'
+    state.enhancingStartedAt = Date.now()
     renderProgress()
+    _startEnhancingTimer()
   }
   if (event.type === 'enhance_complete') {
     const rd = state.reviewData[event.iteration] || {}
@@ -467,7 +493,8 @@ function renderProgress() {
       if (state.currentStep === 'reviewing') {
         statusHtml = '<span class="iter-status reviewing">● reviewing...</span>'
       } else {
-        statusHtml = '<span class="iter-status enhancing">● enhancing spec...</span>'
+        const secs = state.enhancingStartedAt ? Math.floor((Date.now() - state.enhancingStartedAt) / 1000) : 0
+        statusHtml = `<span class="iter-status enhancing" id="enhancing-status">● enhancing spec... <span id="enhancing-timer">${secs}s</span></span>`
       }
     }
 

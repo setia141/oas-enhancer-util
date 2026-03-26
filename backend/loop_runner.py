@@ -38,19 +38,18 @@ def _sanitize_spec(spec: dict) -> dict:
     """Fix common model mistakes in the returned spec."""
     # Move paths accidentally placed at the top level into paths dict
     for k in [k for k in list(spec.keys()) if k.startswith("/")]:
-        logger.warning("Moving misplaced top-level path into paths: %s", k)
         spec.setdefault("paths", {})[k] = spec.pop(k)
 
     # Remove junk top-level keys the model sometimes adds (e.g. "changes_made")
     for k in [k for k in list(spec.keys()) if k not in _OAS_TOP_LEVEL and not k.startswith("x-")]:
-        logger.warning("Removing unexpected top-level key: %s", k)
+        logger.debug("Sanitize: removing unexpected top-level key '%s'", k)
         del spec[k]
 
     # Remove non-path keys from paths dict — but preserve x- extensions
     if isinstance(spec.get("paths"), dict):
         for k in [k for k in list(spec["paths"].keys())
                   if not k.startswith("/") and not k.startswith("x-")]:
-            logger.warning("Removing non-path key from paths: %s", k)
+            logger.debug("Sanitize: removing non-path key from paths '%s'", k)
             del spec["paths"][k]
 
     return spec
@@ -118,6 +117,11 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
         user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
     if instructions:
         user_content += f"\n\nAdditional instructions: {instructions}"
+    if state.get("validation_errors"):
+        user_content += (
+            f"\n\nOAS Validation errors that must be fixed ({len(state['validation_errors'])} total):\n"
+            + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
+        )
     if iteration > 1 and state.get("last_changes"):
         user_content += (
             "\n\nNote: The previous iteration already applied these changes:\n"
@@ -237,12 +241,16 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
 
 # ── Heartbeat helper ───────────────────────────────────────────────────────────
 
-async def _await_with_heartbeat(coro):
+async def _await_with_heartbeat(coro, label: str = ""):
     """Run a coroutine, yielding heartbeat pings every HEARTBEAT_INTERVAL seconds."""
-    task = asyncio.create_task(coro)
+    task    = asyncio.create_task(coro)
+    elapsed = 0
     while not task.done():
         done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL)
         if not done:
+            elapsed += HEARTBEAT_INTERVAL
+            if elapsed % 30 == 0:   # log every 30 seconds so backend shows signs of life
+                logger.info("Still waiting for %s — %ds elapsed", label, elapsed)
             yield {"type": "heartbeat"}
     yield task.result()
 
@@ -267,6 +275,11 @@ async def run_enhancement_loop(
     logger.info("Loop starting — %r, %d paths, %d bytes, max_iterations=%d, has_postman=%s",
                 spec_title, path_count, len(oas_json), max_iterations, has_postman)
 
+    if path_count == 0:
+        logger.error("Spec has no paths — is this a valid OAS spec? Check that the file has a 'paths' key.")
+        yield {"type": "error", "message": "The uploaded spec has no paths. Please upload a valid OpenAPI spec (JSON or YAML) with a 'paths' key."}
+        return
+
     original_validation = _validate_spec(original_spec, "original spec")
 
     state: dict = {
@@ -275,6 +288,7 @@ async def run_enhancement_loop(
         "has_postman":        has_postman,
         "review_suggestions": [],
         "last_changes":       [],
+        "validation_errors":  original_validation,
     }
 
     all_iterations:        list[dict] = []
@@ -294,7 +308,7 @@ async def run_enhancement_loop(
         yield {"type": "iteration_start", "iteration": iteration}
 
         # ── Reviewer ──────────────────────────────────────────────────────────
-        async for _hb in _await_with_heartbeat(_run_reviewer(state, instructions, iteration)):
+        async for _hb in _await_with_heartbeat(_run_reviewer(state, instructions, iteration), f"iter-{iteration} reviewer"):
             if _hb.get("type") == "heartbeat":
                 yield _hb
             else:
@@ -312,14 +326,15 @@ async def run_enhancement_loop(
         # ── Enhancer ──────────────────────────────────────────────────────────
         yield {"type": "enhance_start", "iteration": iteration}
 
-        async for _hb in _await_with_heartbeat(_run_enhancer(state, iteration)):
+        async for _hb in _await_with_heartbeat(_run_enhancer(state, iteration), f"iter-{iteration} enhancer"):
             if _hb.get("type") == "heartbeat":
                 yield _hb
             else:
                 result = _hb
 
-        state["current_spec"] = result["enhanced_spec"]
-        state["last_changes"] = result["changes_made"]
+        state["current_spec"]      = result["enhanced_spec"]
+        state["last_changes"]      = result["changes_made"]
+        state["validation_errors"] = _validate_spec(result["enhanced_spec"], f"iter-{iteration}")
 
         all_iterations.append({
             "iteration":      iteration,

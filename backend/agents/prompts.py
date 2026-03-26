@@ -52,10 +52,12 @@ IMPORTANT: You must ALWAYS finish by calling the `save_enhanced_spec` tool. Neve
 
 ## What to do
 - Apply ALL suggestions from the user message
-- All examples must be realistic and conform to the schema
+- Fix any OAS validation errors listed in the user message
+- All examples must be realistic and conform to the schema — keep them short (one example per field is enough)
 - Error response schemas must include: code (string), message (string), details (object)
-- Descriptions must be clear and written for API consumers
+- Descriptions must be clear and written for API consumers — one concise sentence is enough
 - Maintain valid OAS 3.x structure throughout
+- Be concise: do not add verbose or repetitive content that bloats the spec unnecessarily
 
 ## save_enhanced_spec arguments
 - `enhanced_spec`: the complete updated OAS 3.x object (dict) — must contain ALL paths from the input
