@@ -12,11 +12,12 @@ An AI-powered web application that automatically enhances OpenAPI Specification 
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Local Setup](#local-setup)
+- [Docker Setup](#docker-setup)
 - [Environment Variables](#environment-variables)
 - [Running the App](#running-the-app)
 - [Customising Reviewer Rules](#customising-reviewer-rules)
 - [API Reference](#api-reference)
-- [State Flow](#state-flow)
+- [Large Specs](#large-specs)
 - [Security Notes](#security-notes)
 - [Troubleshooting](#troubleshooting)
 
@@ -24,13 +25,13 @@ An AI-powered web application that automatically enhances OpenAPI Specification 
 
 ## Overview
 
-Upload an OAS file (JSON or YAML, Swagger 2.0 or OAS 3.x). The app runs a multi-agent loop where:
+Upload an OAS file (JSON or YAML, OAS 3.x). The app runs a multi-agent loop where:
 
 1. A **Reviewer** agent reads the spec and identifies issues (missing descriptions, examples, error schemas, etc.)
-2. An **Enhancer** agent applies all suggestions and returns the improved spec
+2. An **Enhancer** agent applies all suggestions and returns the complete improved spec
 3. The loop repeats up to a configurable number of iterations (default: 5) until the reviewer is satisfied
 
-Progress streams live to the browser via Server-Sent Events (SSE). The final enhanced spec is available in both YAML and JSON, with a side-by-side diff against the original.
+Progress streams live to the browser via Server-Sent Events (SSE). The final enhanced spec is available as YAML with a side-by-side diff against the original.
 
 Optionally upload a Postman collection alongside the OAS file to enable breaking change improvements (schema alignment).
 
@@ -44,61 +45,55 @@ Browser
    │  HTTP / SSE
    ▼
 Flask Frontend  (flask_ui — port 3000)
-   │  app.py — serves UI, proxies /enhance and /convert to backend
+   │  app.py — serves UI, proxies /enhance to backend
    │
    │  POST /enhance  (proxied SSE stream)
-   │  POST /convert
    ▼
 FastAPI Backend  (backend — port 8000)
-   │  server.py — /enhance (SSE), /convert, /config, /health
+   │  server.py — /enhance (SSE), /config, /health
    │
    └── Enhancement Loop  (loop_runner.py — configurable iterations via MAX_ITERATIONS)
          │
          ├── Reviewer Agent  (gpt-4.1-mini)
-         │     reads current spec + previous changes context
+         │     reads current spec (YAML) + previous changes context
          │     calls submit_review tool
          │     outputs: satisfied, summary, suggestions[]
          │
-         └── Enhancer Agent  (gpt-4.1, streamed)
-               reads current spec + reviewer suggestions
+         └── Enhancer Agent  (gpt-4.1)
+               reads current spec (YAML) + reviewer suggestions
                calls save_enhanced_spec tool
                outputs: full updated spec, changes_made[]
 ```
 
 **Why two separate servers?**
-Flask handles the browser-facing UI (templating, file uploads, SSE proxying). FastAPI handles the async agent loop with proper SSE streaming and multipart file handling. The Flask frontend proxies all `/enhance` and `/convert` requests to FastAPI — the browser never calls FastAPI directly.
+Flask handles the browser-facing UI (templating, file uploads, SSE proxying). FastAPI handles the async agent loop with proper SSE streaming and multipart file handling. The Flask frontend proxies all `/enhance` requests to FastAPI — the browser never calls FastAPI directly.
 
 ---
 
 ## How the Enhancement Loop Works
 
 ```
-Upload OAS file (+ optional Postman collection + optional instructions)
+Upload OAS file (+ optional Postman collection)
       │
       ▼
-Parse and validate original spec — record baseline errors
+Normalise line endings, parse YAML/JSON → internal dict
+Validate original spec — record baseline errors
       │
       ▼
 For each iteration (up to MAX_ITERATIONS, default 5):
   │
   ├── 1. Check stall guard — if no improvement for 3 consecutive iterations → stop
   │
-  ├── 2. Reviewer (gpt-4.1-mini) reads current spec
-  │         → calls submit_review(satisfied, summary, suggestions)
+  ├── 2. Reviewer (gpt-4.1-mini) reads current spec as YAML
+  │         → calls submit_review(satisfied, summary, suggestions[])
   │
-  ├── 3. If satisfied = true OR suggestions = [] → stop (reviewer is happy)
+  ├── 3. If satisfied = true OR suggestions = [] → stop
   │
-  ├── 4. Enhancer (gpt-4.1, streamed) reads spec + all suggestions
-  │         → calls save_enhanced_spec(enhanced_spec, changes_made)
+  ├── 4. Enhancer (gpt-4.1) reads full spec as YAML + all suggestions
+  │         → calls save_enhanced_spec(enhanced_spec, changes_made[])
+  │         timeout: 10 minutes
   │
-  └── 5. Spec post-processing:
-            - Misplaced path items rescued from top level into paths{}
-            - Non-OAS top-level keys stripped
-            - Non-path keys stripped from paths{}
-            - Swagger 2.0 fields (produces/consumes) stripped from OAS 3.x operations
-            - Duplicate operationIds renamed (_2, _3, …)
-            - Paths/operations dropped by the model restored from previous iteration
-            - Updated spec validated — errors logged
+  └── 5. Validate updated spec — track errors for next reviewer pass
       │
       ▼
 done event:
@@ -107,7 +102,7 @@ done event:
 ```
 
 **Breaking changes policy:**
-- Without Postman collection → additive only (add descriptions, examples, new error responses). Existing paths, schemas, types, formats never changed.
+- Without Postman collection → additive only (add descriptions, examples, new error responses). Existing paths, schemas, types, formats are never changed.
 - With Postman collection → breaking changes allowed. Enhancer may align schemas with actual Postman responses.
 
 **Why two different models?**
@@ -115,7 +110,10 @@ done event:
 | Agent | Model | Reason |
 |---|---|---|
 | Reviewer | `gpt-4.1-mini` | Only reads spec and outputs a short suggestion list — fast and cost-efficient |
-| Enhancer | `gpt-4.1` (streamed) | Must read the full spec, apply all changes, and return the **complete modified spec** as a structured tool call — large output task requiring the stronger model. Streamed to keep the connection alive. |
+| Enhancer | `gpt-4.1` | Must read the full spec, apply all changes, and return the **complete modified spec** as a structured tool call — large output task requiring the stronger model |
+
+**Why YAML instead of JSON for LLM prompts?**
+YAML is ~30–40% more compact than equivalent JSON for OAS specs. This reduces input token usage and leaves more room in the context window for the model's output — especially important for large specs.
 
 ---
 
@@ -126,30 +124,30 @@ oas-enhancer-util/
 │
 ├── backend/                        # FastAPI backend
 │   ├── __init__.py
-│   ├── server.py                   # API endpoints: /enhance (SSE), /convert, /config, /health
-│   ├── loop_runner.py              # Multi-agent loop, spec sanitization, SSE event stream, heartbeat
+│   ├── server.py                   # API endpoints: /enhance (SSE), /config, /health
+│   ├── loop_runner.py              # Multi-agent loop, OAS validation, SSE event stream, heartbeat
+│   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── .env                        # OPENAI_API_KEY (+ MAX_ITERATIONS) — git-ignored, create from .env.example
+│   ├── .env                        # OPENAI_API_KEY (+ MAX_ITERATIONS) — git-ignored
 │   ├── .env.example                # Template for backend env vars
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── prompts.py              # ← edit REVIEWER_RULES here to change what gets checked
-│   │   └── tools.py                # OpenAI function schemas + breaking-changes policy helper
-│   └── tools/
+│   └── agents/
 │       ├── __init__.py
-│       └── oas_to_postman.py       # Native Python OAS 3.x → Postman Collection v2.1 converter
+│       ├── prompts.py              # ← edit REVIEWER_RULES here to change what gets checked
+│       └── tools.py                # OpenAI function schemas + breaking-changes policy helper
 │
 ├── flask_ui/                       # Flask frontend
 │   ├── app.py                      # Flask server — UI routes + proxy to backend
+│   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── .env                        # BACKEND_URL (+ MAX_ITERATIONS) — git-ignored, create from .env.example
+│   ├── .env                        # BACKEND_URL (+ MAX_ITERATIONS) — git-ignored
 │   ├── .env.example                # Template for frontend env vars
 │   └── templates/
 │       ├── home.html               # Landing page
 │       └── index.html              # OAS Enhancer single-page app (SSE reader, diff viewer)
 │
-├── README.md
-└── Dockerfile
+├── docker-compose.yml
+├── sample_spec.yaml                # Sample E-Commerce API spec for testing
+└── README.md
 ```
 
 ---
@@ -244,6 +242,20 @@ Edit `flask_ui/.env` if your backend runs on a non-default host/port or you want
 
 ---
 
+## Docker Setup
+
+```bash
+cp backend/.env.example backend/.env
+# fill in OPENAI_API_KEY in backend/.env
+
+docker-compose up --build
+```
+
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8000`
+
+---
+
 ## Running the App
 
 You need **two terminals running simultaneously** — one for the backend, one for the frontend.
@@ -267,7 +279,7 @@ python app.py
 
 Frontend starts at `http://localhost:3000`
 
-Open your browser at **http://localhost:3000**.
+Open your browser at **http://localhost:3000/oas-enhancer**.
 
 ---
 
@@ -329,8 +341,6 @@ Everything else — tool call instructions, output format, enhancer prompt — i
 }
 ```
 
-Returns the server-side `MAX_ITERATIONS` value. Useful for clients to discover the configured default.
-
 ---
 
 ### `POST /enhance` — upload OAS file, receive SSE stream
@@ -339,9 +349,8 @@ Returns the server-side `MAX_ITERATIONS` value. Useful for clients to discover t
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `oas_file` | file | Yes | OAS spec — `.json`, `.yaml`, `.yml` (Swagger 2.0 or OAS 3.x) |
+| `oas_file` | file | Yes | OAS spec — `.json`, `.yaml`, `.yml` (OAS 3.x) |
 | `postman_file` | file | No | Postman Collection v2.1 `.json` — enables breaking change improvements |
-| `instructions` | string | No | Additional instructions passed to both reviewer and enhancer agents |
 | `max_iterations` | integer | No | Override max iterations for this request (default: server `MAX_ITERATIONS`) |
 
 **Response** — `text/event-stream` (SSE)
@@ -360,57 +369,37 @@ Each event is a line in the format `data: <json>\n\n`
 
 ---
 
-### `POST /convert` — convert OAS to Postman Collection
-
-**Request** — `multipart/form-data`
-
-| Field | Type | Required |
-|---|---|---|
-| `oas_file` | file | Yes |
-
-**Response** — `application/json`
-
-```json
-{
-  "collection": { ... }
-}
-```
-
-Returns a Postman Collection v2.1 JSON object. Conversion is implemented natively in Python — no Node.js or npm dependency.
-
----
-
 ### `GET /health`
 
 Returns `{ "status": "ok" }`. Use this to verify the backend is running before starting the frontend.
 
 ---
 
-## State Flow
+## Large Specs
 
-Each `/enhance` request creates an isolated `state` dict — no shared state between concurrent requests.
+The single-spec enhancement approach works reliably up to roughly **20–30 paths**. Beyond that:
 
-| Key | Set by | Used by | Description |
-|---|---|---|---|
-| `current_spec` | Loop init, enhancer | Reviewer, enhancer | Live OAS spec dict — mutated each iteration |
-| `postman_json` | Loop init | Enhancer | Postman collection string (if provided) |
-| `has_postman` | Loop init | Reviewer, enhancer | Controls breaking changes policy |
-| `review_satisfied` | Reviewer | Loop | True when no more improvements needed |
-| `review_summary` | Reviewer | Loop | Overall assessment text |
-| `review_suggestions` | Reviewer | Enhancer | List of actionable improvements for current iteration |
-| `last_changes` | Enhancer | Reviewer (next iter) | Changes applied — passed to reviewer to avoid re-flagging fixed issues |
+| Spec size | Recommendation |
+|---|---|
+| < 80 KB | Works fine — no action needed |
+| 80 KB – 200 KB | Warning shown in UI — results may vary, consider splitting |
+| 200 KB+ | Hard stop recommended — split by tag before uploading |
+
+**How to split a large spec:**
+Group paths by their `tags` field into separate smaller spec files (e.g. one file for `Auth`, one for `Products`, one for `Orders`). Enhance each file separately, then merge the `paths` sections back into your main spec. Aim for 10–15 paths per file.
+
+The UI shows a warning for files over 80 KB and blocks submission for files under 200 bytes (too small to be a valid spec).
 
 ---
 
 ## Security Notes
 
-- **No npm dependencies** — OAS → Postman conversion is implemented natively in Python; no Node.js required
 - **`.env` is git-ignored** — never commit your `OPENAI_API_KEY`
-- **Streamed enhancer** — the enhancer uses `stream=True` on the OpenAI call so tokens flow continuously; this prevents proxy/browser timeouts on large specs
 - **SSE heartbeat** — a keepalive ping is sent every 5 seconds while the LLM is processing, preventing the browser from treating the connection as frozen
-- **Agent timeout** — each model call is guarded by a 120-second `asyncio` timeout; a timed-out call does not crash the loop
+- **Agent timeouts** — reviewer: 120s, enhancer: 600s — timed-out calls do not crash the loop
 - **Request isolation** — each `/enhance` request gets its own `state` dict; concurrent requests cannot interfere with each other
-- **Spec sanitization** — the enhancer output is sanitized before being saved: misplaced keys are rescued, invalid fields are stripped, dropped paths are restored from the previous iteration
+- **Line ending normalisation** — uploaded files have `\r\n` normalised to `\n` at ingestion to prevent noise in LLM prompts
+- **OAS validation** — spec is validated before and after enhancement; validation errors are tracked and passed to the reviewer for fixing
 
 ---
 
@@ -437,15 +426,13 @@ The backend is not running or is unreachable.
 `MAX_ITERATIONS` must be set to the same value in both `backend/.env` and `flask_ui/.env`. The UI reads it from the Flask env at page load; the backend enforces it during processing.
 
 ### Enhancer is slow or appears to hang
-The enhancer uses `gpt-4.1` with up to 32K output tokens — large specs can take 30–90 seconds per iteration. This is expected behaviour. The SSE heartbeat keeps the connection alive throughout. If you need faster results:
-- Reduce `MAX_ITERATIONS` in your `.env` files
-- The reviewer will stop early automatically once the spec is satisfactory
-
-### Enhancer returns spec with missing paths
-This is handled automatically — the `_restore_dropped_content` function in `loop_runner.py` back-fills any paths the model dropped. Check the backend logs for `Restored N dropped path(s)` warnings.
+The enhancer uses `gpt-4.1` with up to 32K output tokens — large specs can take 2–5 minutes per iteration. This is expected. The SSE heartbeat keeps the connection alive and the UI timer shows elapsed time. The enhancer timeout is 10 minutes.
 
 ### Loop runs all iterations but reviewer never reaches `satisfied = true`
 The spec may have deep structural issues that additive-only changes cannot fix.
-- Try uploading a Postman collection alongside the OAS file — this enables the enhancer to make breaking changes (schema alignment)
-- Or add custom instructions in the UI to guide the agents
-- Reduce `MAX_ITERATIONS` to limit processing time while you iterate on the spec
+- Try uploading a Postman collection alongside the OAS file — this enables breaking changes (schema alignment)
+- Reduce `MAX_ITERATIONS` to limit processing time
+- For very large specs, split by tag and enhance each section separately
+
+### Uploaded file shows 0 paths
+You may have uploaded a Postman collection or non-OAS file as the OAS spec. The app only accepts valid OAS 3.x JSON/YAML files with a `paths` key.
