@@ -21,66 +21,15 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS     = int(os.environ.get("MAX_ITERATIONS", 5))
 REVIEWER_TIMEOUT   = 120   # seconds
-ENHANCER_TIMEOUT   = 300   # seconds — large specs can take time
+ENHANCER_TIMEOUT   = 600   # seconds
 HEARTBEAT_INTERVAL = 5     # seconds between SSE keepalive pings
 REVIEWER_MODEL     = "gpt-4.1-mini"
 ENHANCER_MODEL     = "gpt-4.1"
 
-_OAS_TOP_LEVEL = {"openapi", "info", "servers", "paths", "components", "security", "tags", "externalDocs"}
-_HTTP_METHODS  = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
-
 _client: AsyncOpenAI | None = None
 
 
-# ── Spec post-processing ───────────────────────────────────────────────────────
-
-def _sanitize_spec(spec: dict) -> dict:
-    """Fix common model mistakes in the returned spec."""
-    # Move paths accidentally placed at the top level into paths dict
-    for k in [k for k in list(spec.keys()) if k.startswith("/")]:
-        spec.setdefault("paths", {})[k] = spec.pop(k)
-
-    # Remove junk top-level keys the model sometimes adds (e.g. "changes_made")
-    for k in [k for k in list(spec.keys()) if k not in _OAS_TOP_LEVEL and not k.startswith("x-")]:
-        logger.debug("Sanitize: removing unexpected top-level key '%s'", k)
-        del spec[k]
-
-    # Remove non-path keys from paths dict — but preserve x- extensions
-    if isinstance(spec.get("paths"), dict):
-        for k in [k for k in list(spec["paths"].keys())
-                  if not k.startswith("/") and not k.startswith("x-")]:
-            logger.debug("Sanitize: removing non-path key from paths '%s'", k)
-            del spec["paths"][k]
-
-    return spec
-
-
-def _restore_dropped_paths(original: dict, enhanced: dict) -> dict:
-    """
-    Re-insert any paths or operations the model omitted from its output.
-    Models sometimes truncate large specs — this ensures no endpoints are lost.
-    Enhanced content takes priority; we only fill in what's missing.
-    """
-    for key, value in original.items():
-        if key not in enhanced:
-            enhanced[key] = value
-
-    orig_paths = {k: v for k, v in original.get("paths", {}).items() if k.startswith("/")}
-    enh_paths  = enhanced.setdefault("paths", {})
-    restored   = []
-    for path, path_item in orig_paths.items():
-        if path not in enh_paths:
-            enh_paths[path] = path_item
-            restored.append(path)
-        else:
-            for method, operation in path_item.items():
-                if method not in enh_paths[path]:
-                    enh_paths[path][method] = operation
-
-    if restored:
-        logger.warning("Restored %d dropped path(s): %s", len(restored), restored)
-    return enhanced
-
+# ── Spec helpers ───────────────────────────────────────────────────────────────
 
 def _validate_spec(spec: dict, label: str) -> list[str]:
     """Returns list of OAS validation error strings (empty = valid)."""
@@ -103,15 +52,19 @@ def init_client() -> None:
 
 # ── Agent calls ────────────────────────────────────────────────────────────────
 
+def _to_yaml(spec: dict) -> str:
+    return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)
+
+
 async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
-    spec_json = json.dumps(state["current_spec"], indent=2)
+    spec_yaml = _to_yaml(state["current_spec"])
     logger.info("Iter %d | reviewer starting — %d bytes, %d paths",
-                iteration, len(spec_json), len(state["current_spec"].get("paths", {})))
+                iteration, len(spec_yaml), len(state["current_spec"].get("paths", {})))
 
     user_content = (
         f"Iteration {iteration}: Review the OAS specification below.\n\n"
         f"Breaking changes policy: {get_breaking_changes_policy(state)}\n\n"
-        f"OAS Spec:\n{spec_json}"
+        f"OAS Spec (YAML):\n{spec_yaml}"
     )
     if state.get("postman_json"):
         user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
@@ -119,7 +72,7 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
         user_content += f"\n\nAdditional instructions: {instructions}"
     if state.get("validation_errors"):
         user_content += (
-            f"\n\nOAS Validation errors that must be fixed ({len(state['validation_errors'])} total):\n"
+            f"\n\nOAS validation errors that must be fixed ({len(state['validation_errors'])} total):\n"
             + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
         )
     if iteration > 1 and state.get("last_changes"):
@@ -168,22 +121,24 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
 
 
 async def _run_enhancer(state: dict, iteration: int) -> dict:
-    spec_json   = json.dumps(state["current_spec"], indent=2)
+    """Enhance the full OAS spec in one call. Returns enhanced spec and changes."""
+    spec_yaml   = _to_yaml(state["current_spec"])
     suggestions = state.get("review_suggestions", [])
-    path_count  = len(state["current_spec"].get("paths", {}))
-    logger.info("Iter %d | enhancer starting — %d bytes, %d paths, %d suggestion(s)",
-                iteration, len(spec_json), path_count, len(suggestions))
 
     user_content = (
-        f"CRITICAL — BREAKING CHANGES POLICY (obey strictly): {get_breaking_changes_policy(state)}\n\n"
-        f"Iteration {iteration}: Apply ALL suggestions to the OAS spec below.\n\n"
-        f"IMPORTANT: The input spec has {path_count} paths. Your output MUST contain all {path_count} paths.\n\n"
-        f"Suggestions:\n{json.dumps(suggestions, indent=2)}\n\n"
-        f"Current OAS Spec:\n{spec_json}"
+        f"Breaking changes policy: {get_breaking_changes_policy(state)}\n\n"
+        f"Suggestions to apply:\n{json.dumps(suggestions, indent=2)}\n\n"
+        f"OAS Spec to enhance (YAML):\n{spec_yaml}"
     )
+    if state.get("validation_errors"):
+        user_content += (
+            f"\n\nOAS validation errors to fix:\n"
+            + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
+        )
     if state.get("postman_json"):
         user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
 
+    logger.info("Iter %d | enhancer starting — %d bytes", iteration, len(spec_yaml))
     t0 = time.monotonic()
     try:
         response = await asyncio.wait_for(
@@ -209,26 +164,10 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
 
         args     = json.loads(choice.message.tool_calls[0].function.arguments)
         enhanced = args.get("enhanced_spec", state["current_spec"])
-
-        if isinstance(enhanced, str):
-            try:
-                enhanced = json.loads(enhanced)
-            except Exception:
-                logger.warning("Iter %d | enhanced_spec was not valid JSON — keeping original", iteration)
-                return {"enhanced_spec": state["current_spec"], "changes_made": []}
-
-        enhanced = _sanitize_spec(enhanced)
-        enhanced = _restore_dropped_paths(state["current_spec"], enhanced)
         changes  = args.get("changes_made", [])
 
-        spec_changed = json.dumps(enhanced, sort_keys=True) != json.dumps(state["current_spec"], sort_keys=True)
-        logger.info("Iter %d | enhancer done in %.1fs — %d change(s), paths %d→%d, spec_changed=%s",
-                    iteration, elapsed, len(changes),
-                    path_count, len(enhanced.get("paths", {})), spec_changed)
-
-        if not spec_changed:
-            logger.warning("Iter %d | enhancer returned spec unchanged", iteration)
-
+        logger.info("Iter %d | enhancer done in %.1fs — %d change(s), %d paths",
+                    iteration, elapsed, len(changes), len(enhanced.get("paths", {})))
         return {"enhanced_spec": enhanced, "changes_made": changes}
 
     except asyncio.TimeoutError:
@@ -249,7 +188,7 @@ async def _await_with_heartbeat(coro, label: str = ""):
         done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL)
         if not done:
             elapsed += HEARTBEAT_INTERVAL
-            if elapsed % 30 == 0:   # log every 30 seconds so backend shows signs of life
+            if elapsed % 30 == 0:
                 logger.info("Still waiting for %s — %ds elapsed", label, elapsed)
             yield {"type": "heartbeat"}
     yield task.result()
@@ -276,7 +215,7 @@ async def run_enhancement_loop(
                 spec_title, path_count, len(oas_json), max_iterations, has_postman)
 
     if path_count == 0:
-        logger.error("Spec has no paths — is this a valid OAS spec? Check that the file has a 'paths' key.")
+        logger.error("Spec has no paths — check that the uploaded file is a valid OAS spec")
         yield {"type": "error", "message": "The uploaded spec has no paths. Please upload a valid OpenAPI spec (JSON or YAML) with a 'paths' key."}
         return
 
@@ -334,16 +273,17 @@ async def run_enhancement_loop(
 
         state["current_spec"]      = result["enhanced_spec"]
         state["last_changes"]      = result["changes_made"]
-        state["validation_errors"] = _validate_spec(result["enhanced_spec"], f"iter-{iteration}")
+        state["validation_errors"] = _validate_spec(state["current_spec"], f"iter-{iteration}")
+        all_changes                = result["changes_made"]
 
         all_iterations.append({
             "iteration":      iteration,
             "review_summary": review["summary"],
             "suggestions":    review["suggestions"],
-            "changes_made":   result["changes_made"],
+            "changes_made":   all_changes,
         })
         yield {"type": "enhance_complete", "iteration": iteration,
-               "data": {"changes_made": result["changes_made"]}}
+               "data": {"changes_made": all_changes}}
 
         # Stop if suggestions are not decreasing across iterations
         suggestion_count = len(review["suggestions"])
@@ -356,9 +296,6 @@ async def run_enhancement_loop(
         prev_suggestion_count = suggestion_count
 
     total_elapsed = time.monotonic() - loop_start
-
-    def _to_yaml(spec: dict) -> str:
-        return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
     final_validation = (
         _validate_spec(state["current_spec"], "final spec")

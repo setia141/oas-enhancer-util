@@ -1,9 +1,6 @@
 """
 OpenAI function tool schemas and state helper functions.
-No ADK dependencies — state is a plain Python dict.
 """
-
-# ── OpenAI tool schemas ────────────────────────────────────────────
 
 REVIEWER_TOOLS = [
     {
@@ -60,8 +57,6 @@ ENHANCER_TOOLS = [
 ]
 
 
-# ── State helper functions ─────────────────────────────────────────
-
 def get_breaking_changes_policy(state: dict) -> str:
     if state.get("has_postman", False):
         return (
@@ -72,10 +67,3 @@ def get_breaking_changes_policy(state: dict) -> str:
         "NO Postman collection is available. Breaking changes are NOT allowed. "
         "Only additive improvements: add examples, descriptions, new error responses, etc."
     )
-
-
-def get_postman_collection(state: dict) -> str:
-    postman = state.get("postman_json")
-    if not postman:
-        return "No Postman collection was provided."
-    return postman

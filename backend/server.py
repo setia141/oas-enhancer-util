@@ -18,7 +18,6 @@ from fastapi.responses import StreamingResponse
 load_dotenv()
 
 from .loop_runner import init_client, run_enhancement_loop, MAX_ITERATIONS   # noqa: E402
-from .tools.oas_to_postman import oas_to_postman             # noqa: E402
 
 
 @asynccontextmanager
@@ -38,7 +37,7 @@ app.add_middleware(
 
 
 def _to_json_str(content: bytes, filename: str) -> str:
-    text = content.decode("utf-8")
+    text = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     if filename.endswith((".yaml", ".yml")):
         data = yaml.safe_load(text)
         return json.dumps(data)
@@ -96,26 +95,6 @@ async def enhance_oas(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-@app.post("/convert")
-async def convert_oas_to_postman(oas_file: UploadFile = File(...)):
-    """Converts an OAS 3.x spec to a Postman Collection v2.1."""
-    try:
-        oas_json = _to_json_str(await oas_file.read(), oas_file.filename or "spec.json")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not parse OAS file: {e}")
-
-    result = oas_to_postman(oas_json)
-    try:
-        collection = json.loads(result)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Conversion failed: {e}")
-
-    if "error" in collection:
-        raise HTTPException(status_code=400, detail=collection["error"])
-
-    return {"collection": collection}
 
 
 @app.get("/health")

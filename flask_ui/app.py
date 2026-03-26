@@ -62,15 +62,5 @@ def enhance():
     )
 
 
-@app.route("/convert", methods=["POST"])
-def convert():
-    files = {}
-    if "oas_file" in request.files:
-        f = request.files["oas_file"]
-        files["oas_file"] = (f.filename, f.read(), f.content_type or "application/octet-stream")
-    r = requests.post(f"{BACKEND_URL}/convert", files=files, timeout=60)
-    return Response(r.content, status=r.status_code, content_type="application/json")
-
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000, debug=True)

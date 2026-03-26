@@ -36,8 +36,10 @@
     .dropzone .dz-hint { font-size:12px; color:#888; }
     .dropzone .dz-file { font-size:13px; color:#34a853; font-weight:500; }
     .remove-btn { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
-    textarea { width:100%; padding:10px 14px; border:1px solid #e0e0e0; border-radius:8px; font-size:13px; font-family:inherit; resize:vertical; line-height:1.5; outline:none; }
-    .submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .file-warn { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
+    .file-warn.warn  { background:#fff8e1; color:#b45309; border:1px solid #fcd34d; }
+    .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
+.submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
     .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
 
     /* ── Progress Tracker ── */
@@ -86,7 +88,6 @@
     .tab-actions { margin-left:auto; display:flex; gap:8px; }
     .action-btn { padding:6px 12px; font-size:12px; background:#fff; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; font-family:inherit; color:#444; }
     .action-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
-    .action-btn.postman { color:#ff6c37; border-color:#ff6c37; }
     .tab-content { flex:1; overflow:hidden; display:flex; flex-direction:column; }
 
     /* YAML tab */
@@ -185,6 +186,7 @@
         </div>
         <input type="file" id="inp-oas" accept=".json,.yaml,.yml" style="display:none" onchange="dzFile(event,'dz-oas','oas')">
         <div class="hint">Accepts JSON, YAML (.yaml/.yml)</div>
+        <div class="file-warn" id="oas-size-warn"></div>
       </div>
 
       <div class="field">
@@ -196,11 +198,6 @@
         </div>
         <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
-      </div>
-
-      <div class="field">
-        <label>Additional Instructions <span class="opt">(optional)</span></label>
-        <textarea id="instructions" rows="3" placeholder="e.g. Focus on POST endpoints, add error response examples, use realistic data..."></textarea>
       </div>
 
       <div class="field">
@@ -241,7 +238,6 @@
       <div class="tab-actions">
         <button class="action-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
         <button class="action-btn primary" onclick="downloadYaml()">⬇ Download YAML</button>
-        <button class="action-btn postman" id="postman-btn" onclick="exportPostman()">📮 Postman</button>
       </div>
     </div>
     <div class="tab-content">
@@ -309,7 +305,6 @@ function resetAll() {
   document.getElementById('progress-body').innerHTML = ''
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''
-  document.getElementById('instructions').value = ''
   dzReset('dz-oas', '📋', 'OAS / Swagger file')
   dzReset('dz-postman', '📮', 'Postman Collection v2.1')
   document.getElementById('remove-postman').style.display = 'none'
@@ -333,10 +328,30 @@ function dzFile(e, id, key) {
   if (f) setFile(id, key, f)
 }
 
+const OAS_MIN_BYTES = 200
+const OAS_WARN_BYTES = 80 * 1024  // 80 KB
+
+function _checkOasSize(file) {
+  const warn = document.getElementById('oas-size-warn')
+  if (file.size < OAS_MIN_BYTES) {
+    warn.className = 'file-warn error'
+    warn.textContent = '⚠ File is too small to be a valid OAS spec — please check the file.'
+    warn.style.display = ''
+    document.getElementById('submit-btn').disabled = true
+  } else if (file.size > OAS_WARN_BYTES) {
+    warn.className = 'file-warn warn'
+    warn.textContent = `⚠ Large spec (${(file.size/1024).toFixed(0)} KB) — results may be inconsistent. Consider splitting by tag before uploading.`
+    warn.style.display = ''
+  } else {
+    warn.style.display = 'none'
+  }
+}
+
 function setFile(id, key, file) {
   if (key === 'oas') {
     state.oasFile = file
-    document.getElementById('submit-btn').disabled = false
+    _checkOasSize(file)
+    if (file.size >= OAS_MIN_BYTES) document.getElementById('submit-btn').disabled = false
   } else {
     state.postmanFile = file
     document.getElementById('remove-postman').style.display = ''
@@ -362,6 +377,7 @@ function dzReset(id, icon, label) {
   if (hint) hint.style.display = ''
   const fileInfo = dz.querySelector('.dz-file')
   if (fileInfo) fileInfo.remove()
+  if (id === 'dz-oas') document.getElementById('oas-size-warn').style.display = 'none'
 }
 
 function removePostman() {
@@ -390,8 +406,6 @@ async function handleSubmit() {
   const form = new FormData()
   form.append('oas_file', state.oasFile)
   if (state.postmanFile) form.append('postman_file', state.postmanFile)
-  const instructions = document.getElementById('instructions').value.trim()
-  if (instructions) form.append('instructions', instructions)
   form.append('max_iterations', String(MAX_ITERATIONS))
 
   try {
@@ -561,6 +575,11 @@ function renderResult() {
       : ` · ⚠ ${origErrors} validation errors (pre-existing in original)`
   } else if (finalErrors > 0) {
     validationNote = ` · ⚠ ${finalErrors} validation errors introduced`
+  }
+  const origPathCount = Object.keys(r.original_spec?.paths || {}).length
+  const droppedPaths  = origPathCount - pathCount
+  if (droppedPaths > 0) {
+    validationNote += ` · ❌ ${droppedPaths} path${droppedPaths > 1 ? 's' : ''} dropped by enhancer`
   }
   document.getElementById('result-meta').textContent =
     `${pathCount} endpoints · ${exampleCount} examples · ${iters} iteration${iters !== 1 ? 's' : ''} · ${changes} total changes${validationNote}`
@@ -773,28 +792,6 @@ function downloadYaml() {
   const yaml = state.result?.final_spec_yaml || ''
   const name = (state.originalFilename || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
   triggerDownload(yaml, name, 'text/yaml')
-}
-
-async function exportPostman() {
-  const btn = document.getElementById('postman-btn')
-  btn.textContent = '⟳'
-  btn.disabled = true
-  try {
-    const yaml = state.result?.final_spec_yaml || ''
-    const file = new File([yaml], 'enhanced.yaml', { type:'text/yaml' })
-    const form = new FormData()
-    form.append('oas_file', file)
-    const resp = await fetch('/convert', { method:'POST', body:form })
-    if (!resp.ok) throw new Error(`Conversion failed: ${resp.status}`)
-    const data = await resp.json()
-    const name = (state.originalFilename || 'oas').replace(/\.(json|yaml|yml)$/, '_postman.json')
-    triggerDownload(JSON.stringify(data.collection, null, 2), name, 'application/json')
-  } catch(e) {
-    alert('Export failed: ' + e.message)
-  } finally {
-    btn.textContent = '📮 Postman'
-    btn.disabled = false
-  }
 }
 
 function triggerDownload(content, filename, type) {
