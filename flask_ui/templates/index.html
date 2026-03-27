@@ -267,6 +267,7 @@ let state = {
   reviewData: {},             // { [iteration]: { satisfied, summary, suggestions } }
   iterations: [],             // completed iteration objects
   result: null,
+  errorOccurred: false,
 }
 
 const MAX_ITERATIONS = {{ max_iterations }}
@@ -301,7 +302,7 @@ function _updateActivityDot() {
 
 function resetAll() {
   clearInterval(_timerInterval)
-  state = { oasFile:null, postmanFile:null, originalFilename:'', currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null, enhancingStartedAt:null, lastHeartbeat:null }
+  state = { oasFile:null, postmanFile:null, originalFilename:'', currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null, enhancingStartedAt:null, lastHeartbeat:null, errorOccurred:false }
   document.getElementById('progress-body').innerHTML = ''
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''
@@ -400,6 +401,7 @@ async function handleSubmit() {
   state.reviewData = {}
   state.iterations = []
   state.result = null
+  state.errorOccurred = false
   renderProgress()
   showPhase('running')
 
@@ -445,6 +447,7 @@ function handleEvent(event) {
     return
   }
   if (event.type === 'error') {
+    state.errorOccurred = true
     document.getElementById('error-msg').textContent = '⚠ ' + event.message
     showPhase('error')
     return
@@ -475,6 +478,7 @@ function handleEvent(event) {
     renderProgress()
   }
   if (event.type === 'done') {
+    if (state.errorOccurred) return
     state.result = event
     state.iterations = event.iterations
     renderProgress()
