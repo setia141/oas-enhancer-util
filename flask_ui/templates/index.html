@@ -777,7 +777,7 @@ function checkSavedSession() {
     const banner = document.getElementById('resume-banner')
     document.getElementById('resume-banner-sub').textContent =
       `"${snap.specFileName}" · ${total} suggestions · ${accepted} accepted · ${pending} pending · saved ${when}`
-    banner.style.display = ''
+    banner.style.display = 'block'
   } catch(e) { /* corrupt data */ }
 }
 
