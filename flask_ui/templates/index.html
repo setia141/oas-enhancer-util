@@ -481,9 +481,10 @@ function buildSuggRow(idx) {
   row.className = 'suggestion-row ' + status
   row.id = 'sugg-row-' + idx
 
+  const displayVal = (s.status === 'edited' && s.editedValue !== undefined) ? s.editedValue : s.value
   const valueText = s.field === 'x-ai' ? 'true'
-    : s.field === 'schema_property' ? JSON.stringify(s.value, null, 2)
-    : String(s.value)
+    : s.field === 'schema_property' ? JSON.stringify(displayVal, null, 2)
+    : String(displayVal)
 
   // Inline YAML context block
   let ctxHtml = ''
@@ -512,7 +513,7 @@ function buildSuggRow(idx) {
           <div class="sugg-value">${escHtml(valueText)}</div>
           ${s.reason ? `<div class="sugg-reason">${escHtml(s.reason)}</div>` : ''}
           <textarea class="sugg-edit-area" id="edit-${idx}" style="${editHidden}"
-            onchange="updateEdit(${idx},this.value)">${editVal}</textarea>
+            oninput="updateEdit(${idx},this.value)">${editVal}</textarea>
           ${ctxHtml}
         </div>
         <div class="sugg-actions">
@@ -540,7 +541,13 @@ function refreshRow(idx) {
   if (el) el.replaceWith(buildSuggRow(idx))
 }
 
+function _captureEditValue(idx) {
+  const ta = document.getElementById('edit-' + idx)
+  if (ta) state.suggestions[idx].editedValue = ta.value
+}
+
 function setSuggStatus(idx, newStatus) {
+  _captureEditValue(idx)
   state.suggestions[idx].status = newStatus
   refreshRow(idx)
   updateToolbar()
@@ -549,6 +556,7 @@ function setSuggStatus(idx, newStatus) {
 }
 
 function toggleEdit(idx) {
+  _captureEditValue(idx)
   const s = state.suggestions[idx]
   s.status = s.status === 'edited' ? 'accepted' : 'edited'
   if (s.status === 'edited') s.editedValue = s.editedValue ?? s.value
