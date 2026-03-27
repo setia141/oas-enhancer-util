@@ -135,6 +135,18 @@
 
     .done-yaml-pre { margin:0; padding:16px 20px; font-size:12px; line-height:1.7; color:#cdd6f4; font-family:monospace; white-space:pre-wrap; word-break:break-all; }
 
+    /* Resume banner */
+    .resume-banner { display:none; margin-bottom:16px; background:#e8f0fe; border:1px solid #c5d8fc; border-radius:10px; padding:12px 14px; }
+    .resume-banner-title { font-size:13px; font-weight:600; color:#1a56db; margin-bottom:2px; }
+    .resume-banner-sub   { font-size:12px; color:#555; margin-bottom:10px; }
+    .resume-banner-btns  { display:flex; gap:8px; }
+    .resume-btn          { padding:6px 14px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; font-weight:600; }
+    .resume-btn.primary  { background:#4285f4; color:#fff; }
+    .resume-btn.secondary{ background:#fff; color:#666; border:1px solid #ddd; }
+
+    /* Save indicator */
+    #save-indicator { position:fixed; bottom:16px; right:16px; background:#222; color:#fff; font-size:12px; padding:6px 12px; border-radius:8px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999; }
+
     /* Error */
     .error-box { max-width:540px; margin:0 auto; padding:40px 16px; }
     .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
@@ -156,6 +168,16 @@
       <p>Upload your spec — review AI suggestions before anything is applied</p>
     </div>
     <div class="card-body">
+      <!-- Resume saved session banner -->
+      <div class="resume-banner" id="resume-banner">
+        <div class="resume-banner-title">📂 Saved session found</div>
+        <div class="resume-banner-sub" id="resume-banner-sub"></div>
+        <div class="resume-banner-btns">
+          <button class="resume-btn primary"   onclick="resumeSession()">Resume</button>
+          <button class="resume-btn secondary" onclick="discardSession()">Discard</button>
+        </div>
+      </div>
+
       <div class="field">
         <label>OpenAPI Spec <span class="req">*</span></label>
         <div id="dz-oas" class="dropzone"
@@ -236,6 +258,9 @@
   </div>
 </div>
 
+<!-- SAVE INDICATOR -->
+<div id="save-indicator">Progress saved</div>
+
 <!-- ERROR -->
 <div id="phase-error" style="display:none" class="error-box">
   <div class="error-msg" id="error-msg"></div>
@@ -273,6 +298,7 @@ function _startTimer() {
 
 function resetAll() {
   clearInterval(_timerInterval)
+  clearProgress()
   state = { oasFile:null, postmanFile:null, spec:null, originalYaml:null, suggestions:[] }
   document.getElementById('inp-oas').value     = ''
   document.getElementById('inp-postman').value = ''
@@ -394,6 +420,7 @@ function handleEvent(event) {
         return true
       })
       .map(s => ({ ...s, status: 'pending' }))
+    saveProgress()
     renderReview()
     showPhase('review')
   }
@@ -514,6 +541,7 @@ function setSuggStatus(idx, newStatus) {
   refreshRow(idx)
   updateToolbar()
   updateGroupStats(idx)
+  saveProgress()
 }
 
 function toggleEdit(idx) {
@@ -523,30 +551,32 @@ function toggleEdit(idx) {
   refreshRow(idx)
   updateToolbar()
   updateGroupStats(idx)
+  saveProgress()
 }
 
 function updateEdit(idx, val) {
   state.suggestions[idx].editedValue = val
+  saveProgress()
 }
 
 function acceptAll() {
   state.suggestions.forEach(s => { if (s.status !== 'rejected') s.status = 'accepted' })
-  renderReview()
+  renderReview(); saveProgress()
 }
 
 function rejectAll() {
   state.suggestions.forEach(s => s.status = 'rejected')
-  renderReview()
+  renderReview(); saveProgress()
 }
 
 function acceptGroup(method, path) {
   state.suggestions.forEach(s => { if (s.path === path && s.method === method) s.status = 'accepted' })
-  renderReview()
+  renderReview(); saveProgress()
 }
 
 function rejectGroup(method, path) {
   state.suggestions.forEach(s => { if (s.path === path && s.method === method) s.status = 'rejected' })
-  renderReview()
+  renderReview(); saveProgress()
 }
 
 function updateGroupStats(idx) {
@@ -598,6 +628,7 @@ async function applyAccepted() {
     })
     const data = await resp.json()
     if (!resp.ok) throw new Error(data.detail || 'Apply failed')
+    clearProgress()
     renderDone(data, accepted.length)
     showPhase('done')
     switchTab('diff')
@@ -688,6 +719,79 @@ function escHtml(str) {
 function escJs(str) {
   return String(str||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
 }
+
+// ── Progress persistence ───────────────────────────────────────────
+const STORAGE_KEY = 'oas_enhancer_progress'
+
+let _saveIndicatorTimer = null
+function _flashSaved() {
+  const el = document.getElementById('save-indicator')
+  el.style.opacity = '1'
+  clearTimeout(_saveIndicatorTimer)
+  _saveIndicatorTimer = setTimeout(() => el.style.opacity = '0', 1500)
+}
+
+function saveProgress() {
+  if (!state.suggestions.length) return
+  try {
+    const snapshot = {
+      savedAt:      new Date().toISOString(),
+      specFileName: state.oasFile?.name || 'unknown',
+      spec:         state.spec,
+      originalYaml: state.originalYaml,
+      suggestions:  state.suggestions,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    _flashSaved()
+  } catch(e) {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+function clearProgress() {
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+function checkSavedSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return
+    const snap = JSON.parse(raw)
+    if (!snap.suggestions || !snap.suggestions.length) return
+
+    const accepted = snap.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length
+    const pending  = snap.suggestions.filter(s => s.status === 'pending').length
+    const total    = snap.suggestions.length
+    const when     = new Date(snap.savedAt).toLocaleString()
+
+    const banner = document.getElementById('resume-banner')
+    document.getElementById('resume-banner-sub').textContent =
+      `"${snap.specFileName}" · ${total} suggestions · ${accepted} accepted · ${pending} pending · saved ${when}`
+    banner.style.display = ''
+  } catch(e) { /* corrupt data */ }
+}
+
+function resumeSession() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(STORAGE_KEY))
+    state.spec         = snap.spec
+    state.originalYaml = snap.originalYaml
+    state.suggestions  = snap.suggestions
+    document.getElementById('resume-banner').style.display = 'none'
+    renderReview()
+    showPhase('review')
+  } catch(e) {
+    alert('Could not restore session.')
+  }
+}
+
+function discardSession() {
+  clearProgress()
+  document.getElementById('resume-banner').style.display = 'none'
+}
+
+// Check on page load
+checkSavedSession()
 </script>
 </body>
 </html>
