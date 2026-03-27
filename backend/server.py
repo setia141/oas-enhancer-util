@@ -220,6 +220,8 @@ def _apply_suggestion(spec: dict, suggestion: dict) -> None:
             target = target[part]
 
     final_key = parts[-1]
+    if isinstance(target, dict) and "$ref" in target:
+        raise ValueError(f"Cannot add '{final_key}' alongside $ref at '{location}' — invalid in OAS 3.0")
     if isinstance(target, list):
         target[int(final_key)] = value
     else:
