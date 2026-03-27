@@ -36,12 +36,11 @@ app.add_middleware(
 )
 
 
-def _to_json_str(content: bytes, filename: str) -> str:
+def _parse_oas(content: bytes, filename: str) -> dict:
     text = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     if filename.endswith((".yaml", ".yml")):
-        data = yaml.safe_load(text)
-        return json.dumps(data)
-    return text
+        return yaml.safe_load(text)
+    return json.loads(text)
 
 
 @app.get("/config")
@@ -67,22 +66,22 @@ async def enhance_oas(
       done              { original_spec, final_spec, iterations, summary }
     """
     try:
-        oas_json = _to_json_str(await oas_file.read(), oas_file.filename or "spec.json")
+        oas_spec = _parse_oas(await oas_file.read(), oas_file.filename or "spec.json")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not parse OAS file: {e}")
 
-    postman_json = None
+    postman_text = None
     has_postman = False
     if postman_file and postman_file.filename:
         try:
-            postman_json = _to_json_str(await postman_file.read(), postman_file.filename)
+            postman_text = (await postman_file.read()).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
             has_postman = True
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Could not parse Postman file: {e}")
+            raise HTTPException(status_code=400, detail=f"Could not read Postman file: {e}")
 
     async def event_stream():
         try:
-            async for event in run_enhancement_loop(oas_json, postman_json, instructions, has_postman, max_iterations):
+            async for event in run_enhancement_loop(oas_spec, postman_text, instructions, has_postman, max_iterations):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

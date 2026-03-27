@@ -573,12 +573,16 @@ function renderResult() {
   const origErrors   = (r.original_validation_errors || []).length
   const finalErrors  = (r.validation_errors || []).length
   let validationNote = ''
-  if (origErrors > 0) {
-    validationNote = finalErrors < origErrors
-      ? ` · ⚠ ${origErrors} validation errors in original → ${finalErrors} after enhancement`
-      : ` · ⚠ ${origErrors} validation errors (pre-existing in original)`
-  } else if (finalErrors > 0) {
-    validationNote = ` · ⚠ ${finalErrors} validation errors introduced`
+  if (origErrors === 0 && finalErrors === 0) {
+    // no note
+  } else if (origErrors === 0 && finalErrors > 0) {
+    validationNote = ` · ❌ ${finalErrors} validation error${finalErrors !== 1 ? 's' : ''} introduced by enhancement`
+  } else if (finalErrors > origErrors) {
+    validationNote = ` · ❌ validation errors increased: ${origErrors} → ${finalErrors}`
+  } else if (finalErrors < origErrors) {
+    validationNote = ` · ⚠ ${origErrors} validation errors in original → ${finalErrors} after enhancement`
+  } else {
+    validationNote = ` · ⚠ ${origErrors} validation error${origErrors !== 1 ? 's' : ''} (unchanged)`
   }
   const origPathCount = Object.keys(r.original_spec?.paths || {}).length
   const droppedPaths  = origPathCount - pathCount

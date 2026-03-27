@@ -213,8 +213,8 @@ async def _await_with_heartbeat(coro, label: str = ""):
 # ── Main loop ──────────────────────────────────────────────────────────────────
 
 async def run_enhancement_loop(
-    oas_json:       str,
-    postman_json:   str | None,
+    oas_spec:       dict,
+    postman_text:   str | None,
     instructions:   str,
     has_postman:    bool,
     max_iterations: int = MAX_ITERATIONS,
@@ -222,13 +222,13 @@ async def run_enhancement_loop(
     if not _client:
         raise RuntimeError("HTTP client not initialised — call init_client() first")
 
-    current_spec  = json.loads(oas_json) if isinstance(oas_json, str) else oas_json
+    current_spec  = oas_spec
     original_spec = json.loads(json.dumps(current_spec))  # deep copy
 
     path_count = len(current_spec.get("paths", {}))
     spec_title = current_spec.get("info", {}).get("title", "untitled")
-    logger.info("Loop starting — %r, %d paths, %d bytes, max_iterations=%d, has_postman=%s",
-                spec_title, path_count, len(oas_json), max_iterations, has_postman)
+    logger.info("Loop starting — %r, %d paths, max_iterations=%d, has_postman=%s",
+                spec_title, path_count, max_iterations, has_postman)
 
     if path_count == 0:
         logger.error("Spec has no paths — check that the uploaded file is a valid OAS spec")
@@ -239,7 +239,7 @@ async def run_enhancement_loop(
 
     state: dict = {
         "current_spec":       current_spec,
-        "postman_json":       postman_json,
+        "postman_json":       postman_text,
         "has_postman":        has_postman,
         "review_suggestions": [],
         "last_changes":       [],
