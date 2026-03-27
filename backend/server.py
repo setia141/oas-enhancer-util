@@ -49,8 +49,8 @@ def _to_yaml(spec: dict) -> str:
 
 def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
     """
-    Returns the YAML lines of the parent object where the suggestion would be inserted,
-    plus the formatted line that would be added.
+    Returns YAML of the full operation (or component section) with the suggested
+    insertion line marked, preserving indentation.
     """
     path     = suggestion.get("path", "")
     method   = suggestion.get("method", "")
@@ -58,45 +58,50 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
     field    = suggestion.get("field", "")
     value    = suggestion.get("value", "")
 
-    # Resolve root object for this suggestion
     try:
         if method == "component":
-            root = spec.get("components", {})
+            # Show the component section (e.g. schemas)
+            section = location.split(".")[0]
+            root = spec.get("components", {}).get(section, {})
         else:
+            # Show the full operation object for context
             root = spec.get("paths", {}).get(path, {}).get(method, {})
         if not root:
             return {"context_lines": [], "inserted_line": ""}
     except Exception:
         return {"context_lines": [], "inserted_line": ""}
 
-    # Navigate to the parent of the target field
+    # Dump the operation/section — this gives full indented YAML context
+    try:
+        context_yaml  = yaml.dump(root, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        context_lines = context_yaml.split("\n")
+        # Remove trailing empty lines, cap at 40 lines
+        context_lines = [l for l in context_lines if l.strip()][:40]
+    except Exception:
+        context_lines = []
+
+    # Determine indentation of the insertion point by navigating to parent
     parts  = location.split(".")
     target = root
+    indent = 0
     try:
         for part in parts[:-1]:
             if isinstance(target, list):
                 target = target[int(part)]
+                indent += 2
             elif isinstance(target, dict):
                 target = target.get(part, {})
+                indent += 2
     except (KeyError, IndexError, TypeError):
-        target = root
+        pass
 
-    # Dump parent object — cap at 10 lines to keep context readable
-    try:
-        context_yaml  = yaml.dump(target, allow_unicode=True, sort_keys=False, default_flow_style=False)
-        context_lines = [l for l in context_yaml.split("\n") if l.strip()][:10]
-    except Exception:
-        context_lines = []
-
-    # Format the line that would be inserted
+    # Format the inserted line with matching indentation
     final_key = parts[-1]
+    pad = " " * indent
     if field == "x-ai":
-        inserted_line = f"{final_key}: true"
-    elif isinstance(value, str):
-        # Quote if contains special YAML chars
-        inserted_line = f"{final_key}: {json.dumps(value)}"
+        inserted_line = f"{pad}{final_key}: true"
     else:
-        inserted_line = f"{final_key}: {json.dumps(value)}"
+        inserted_line = f"{pad}{final_key}: {json.dumps(value)}"
 
     return {"context_lines": context_lines, "inserted_line": inserted_line}
 
@@ -150,32 +155,36 @@ async def suggest(
 @app.post("/apply")
 async def apply_suggestions(payload: dict):
     """
-    Apply accepted suggestions to the spec and return the final YAML.
+    Apply accepted suggestions to the spec and return original + final YAML.
     Payload: { "spec": {...}, "accepted": [ {path, method, location, field, value}, ... ] }
     """
+    import copy
     spec     = payload.get("spec")
     accepted = payload.get("accepted", [])
 
     if not spec:
         raise HTTPException(status_code=400, detail="spec is required")
 
+    original_yaml = _to_yaml(spec)
+    working_spec  = copy.deepcopy(spec)
+
     applied  = []
     failures = []
 
     for s in accepted:
         try:
-            _apply_suggestion(spec, s)
+            _apply_suggestion(working_spec, s)
             applied.append(s)
         except Exception as e:
             logger.warning("Could not apply suggestion %s: %s", s, e)
             failures.append({"suggestion": s, "error": str(e)})
 
     return {
-        "spec":      spec,
-        "spec_yaml": _to_yaml(spec),
-        "applied":   len(applied),
-        "failed":    len(failures),
-        "failures":  failures,
+        "original_yaml": original_yaml,
+        "spec_yaml":     _to_yaml(working_spec),
+        "applied":       len(applied),
+        "failed":        len(failures),
+        "failures":      failures,
     }
 
 

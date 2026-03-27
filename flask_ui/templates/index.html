@@ -49,23 +49,32 @@
     .progress-timer  { font-size:13px; color:#999; }
 
     /* Review panel */
-    .review-page { width:100%; max-width:900px; }
-    .review-toolbar { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); padding:14px 20px; display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-    .review-toolbar h2 { font-size:16px; font-weight:700; flex:1; }
-    .tbar-stat { font-size:13px; color:#666; }
-    .tbar-btn { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
+    .review-page { width:100%; max-width:1300px; display:flex; flex-direction:column; height:calc(100vh - 96px); }
+    .review-toolbar { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); padding:12px 20px; display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-shrink:0; flex-wrap:wrap; }
+    .review-toolbar h2 { font-size:15px; font-weight:700; flex:1; }
+    .tbar-stat { font-size:12px; color:#666; }
+    .tbar-btn { padding:6px 14px; font-size:13px; border-radius:8px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
     .tbar-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
-    .tbar-btn.success { background:#34a853; color:#fff; border-color:#34a853; }
-    .tbar-btn.danger  { background:#ea4335; color:#fff; border-color:#ea4335; }
+
+    /* Split layout */
+    .review-split { display:flex; gap:12px; flex:1; overflow:hidden; }
+    .review-yaml-panel { flex:1; background:#1e1e2e; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; min-width:0; }
+    .review-yaml-header { padding:10px 16px; background:#2a2a3e; color:#cdd6f4; font-size:12px; font-weight:600; flex-shrink:0; display:flex; align-items:center; gap:8px; }
+    .review-yaml-body { overflow:auto; flex:1; padding:12px 16px; font-family:monospace; font-size:12px; line-height:1.7; }
+    .yaml-spec-line { display:flex; white-space:pre; }
+    .yaml-spec-line .ln { min-width:36px; text-align:right; color:#555; padding-right:12px; user-select:none; flex-shrink:0; }
+    .yaml-spec-line .lc { color:#cdd6f4; flex:1; }
+    .yaml-spec-line.hl-active .lc { background:rgba(251,188,4,.2); color:#fde68a; border-radius:2px; }
+    .review-sugg-panel { width:420px; flex-shrink:0; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
 
     /* Endpoint group */
-    .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); margin-bottom:12px; overflow:hidden; }
-    .endpoint-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #e8eaed; background:#f8f9fa; }
+    .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); overflow:hidden; }
+    .endpoint-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid #e8eaed; background:#f8f9fa; }
     .method-badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; }
-    .endpoint-path { font-size:14px; font-family:monospace; font-weight:600; flex:1; }
-    .group-stats { font-size:12px; color:#888; }
-    .group-actions { display:flex; gap:6px; }
-    .group-btn { padding:4px 10px; font-size:12px; border-radius:6px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
+    .endpoint-path { font-size:13px; font-family:monospace; font-weight:600; flex:1; }
+    .group-stats { font-size:11px; color:#888; }
+    .group-actions { display:flex; gap:4px; }
+    .group-btn { padding:3px 8px; font-size:11px; border-radius:6px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
     .group-btn.accept-all { color:#34a853; border-color:#34a853; }
     .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
 
@@ -206,7 +215,15 @@
       <button class="tbar-btn primary" id="apply-btn" onclick="applyAccepted()">Apply Accepted →</button>
       <button class="tbar-btn" onclick="resetAll()">← New File</button>
     </div>
-    <div id="review-body"></div>
+    <div class="review-split">
+      <div class="review-yaml-panel">
+        <div class="review-yaml-header">
+          📄 <span id="yaml-panel-title">Original Spec</span>
+        </div>
+        <div class="review-yaml-body" id="yaml-viewer"></div>
+      </div>
+      <div class="review-sugg-panel" id="review-body"></div>
+    </div>
   </div>
 
   <!-- DONE -->
@@ -383,12 +400,68 @@ function handleEvent(event) {
   }
   if (event.type === 'done') {
     clearInterval(_timerInterval)
-    state.spec          = event.spec
-    state.originalYaml  = event.original_yaml
-    state.suggestions   = event.suggestions.map(s => ({ ...s, status: 'pending' }))
+    state.spec         = event.spec
+    state.originalYaml = event.original_yaml
+    state.suggestions  = event.suggestions.map(s => ({ ...s, status: 'pending' }))
+    renderYamlViewer(state.originalYaml)
     renderReview()
     showPhase('review')
   }
+}
+
+// ── YAML viewer ────────────────────────────────────────────────────
+let _yamlLines = []
+
+function renderYamlViewer(yamlStr) {
+  _yamlLines = (yamlStr || '').split('\n')
+  const viewer = document.getElementById('yaml-viewer')
+  viewer.innerHTML = _yamlLines.map((line, i) =>
+    `<div class="yaml-spec-line" id="yl-${i}"><span class="ln">${i+1}</span><span class="lc">${escHtml(line)}</span></div>`
+  ).join('')
+}
+
+function highlightYamlLines(lineNums) {
+  // Clear previous highlights
+  document.querySelectorAll('.yaml-spec-line.hl-active').forEach(el => el.classList.remove('hl-active'))
+  if (!lineNums || !lineNums.length) return
+  lineNums.forEach(n => {
+    const el = document.getElementById(`yl-${n}`)
+    if (el) el.classList.add('hl-active')
+  })
+  // Scroll to first highlighted line
+  const first = document.getElementById(`yl-${lineNums[0]}`)
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
+function findYamlLinesForSugg(s) {
+  // Find approximate line range in the YAML for this suggestion's path+method
+  const needle = s.method === 'component'
+    ? s.path.replace(/^\//, '')
+    : s.path
+
+  const lines  = []
+  let inSection = false
+  let indent    = -1
+
+  for (let i = 0; i < _yamlLines.length; i++) {
+    const line = _yamlLines[i]
+    if (line.includes(needle)) {
+      inSection = true
+      indent    = line.search(/\S/)
+      lines.push(i)
+      continue
+    }
+    if (inSection) {
+      const curIndent = line.search(/\S/)
+      if (curIndent === -1 || curIndent > indent) {
+        lines.push(i)
+        if (lines.length >= 20) break
+      } else {
+        break
+      }
+    }
+  }
+  return lines
 }
 
 // ── Review rendering ───────────────────────────────────────────────
@@ -473,6 +546,10 @@ function buildSuggRow(idx) {
       ${editArea}
       ${s.reason ? `<div class="sugg-reason">💡 ${escHtml(s.reason)}</div>` : ''}
     </div>`
+
+  // Hover → highlight corresponding lines in YAML viewer
+  row.addEventListener('mouseenter', () => highlightYamlLines(findYamlLinesForSugg(s)))
+  row.addEventListener('mouseleave', () => highlightYamlLines([]))
   return row
 }
 
@@ -601,12 +678,8 @@ function renderDone(data, appliedCount) {
   document.getElementById('result-meta').textContent =
     `${appliedCount} changes applied · ${data.failed} failed`
   document.getElementById('tab-yaml').textContent = data.spec_yaml || ''
-  _origYaml  = state.originalYaml || ''
-  _finalYaml = data.spec_yaml || ''
-
-  // Reconstruct original YAML from original spec for diff
-  // We stored the spec before applying — need to get original YAML
-  // Use the spec we received in the done event for diff base
+  _origYaml  = data.original_yaml || ''
+  _finalYaml = data.spec_yaml     || ''
   renderDiff(_origYaml, _finalYaml)
 }
 
