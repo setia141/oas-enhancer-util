@@ -67,22 +67,30 @@ async def _chat(payload: dict, timeout: int) -> str:
     """
     POST /chat/completions with stream=True.
     Returns the concatenated tool call arguments string.
+    Retries once on 429 after honouring Retry-After.
     """
-    payload["stream"] = True
-    tool_args = ""
+    payload = {**payload, "stream": True}
 
-    async with asyncio.timeout(timeout):
-        async with _client.stream("POST", "/chat/completions", json=payload) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: ") or line == "data: [DONE]":
+    for attempt in range(2):
+        tool_args = ""
+        async with asyncio.timeout(timeout):
+            async with _client.stream("POST", "/chat/completions", json=payload) as resp:
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("retry-after", 30))
+                    logger.warning("Rate limited (429) — waiting %ds before retry", retry_after)
+                    await asyncio.sleep(retry_after)
                     continue
-                chunk = json.loads(line[6:])
-                for choice in chunk.get("choices", []):
-                    for tc in (choice.get("delta", {}).get("tool_calls") or []):
-                        tool_args += tc.get("function", {}).get("arguments", "")
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: ") or line == "data: [DONE]":
+                        continue
+                    chunk = json.loads(line[6:])
+                    for choice in chunk.get("choices", []):
+                        for tc in (choice.get("delta", {}).get("tool_calls") or []):
+                            tool_args += tc.get("function", {}).get("arguments", "")
+        return tool_args
 
-    return tool_args
+    return ""
 
 
 # ── Agent calls ────────────────────────────────────────────────────────────────
@@ -178,20 +186,25 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
             logger.warning("Iter %d | enhancer returned no tool call (%.1fs)", iteration, elapsed)
             return {"enhanced_spec": state["current_spec"], "changes_made": []}
 
-        args     = json.loads(tool_args)
+        try:
+            args = json.loads(tool_args)
+        except json.JSONDecodeError:
+            logger.error("Iter %d | enhancer output truncated (max_tokens hit) — spec too large, no changes applied", iteration)
+            return {"enhanced_spec": state["current_spec"], "changes_made": [], "truncated": True}
+
         enhanced = args.get("enhanced_spec", state["current_spec"])
         changes  = args.get("changes_made", [])
 
         logger.info("Iter %d | enhancer done in %.1fs — %d change(s), %d paths",
                     iteration, elapsed, len(changes), len(enhanced.get("paths", {})))
-        return {"enhanced_spec": enhanced, "changes_made": changes}
+        return {"enhanced_spec": enhanced, "changes_made": changes, "truncated": False}
 
     except TimeoutError:
         logger.error("Iter %d | enhancer timed out after %ds", iteration, ENHANCER_TIMEOUT)
     except Exception as e:
         logger.error("Iter %d | enhancer error: %s", iteration, e, exc_info=True)
 
-    return {"enhanced_spec": state["current_spec"], "changes_made": []}
+    return {"enhanced_spec": state["current_spec"], "changes_made": [], "truncated": True}
 
 
 # ── Heartbeat helper ───────────────────────────────────────────────────────────
@@ -286,6 +299,11 @@ async def run_enhancement_loop(
                 yield _hb
             else:
                 result = _hb
+
+        if result.get("truncated"):
+            logger.warning("Iter %d | enhancer failed — stopping loop", iteration)
+            yield {"type": "error", "message": "Enhancer output was truncated or failed. Your spec may be too large — consider splitting it by tag."}
+            break
 
         state["current_spec"]      = result["enhanced_spec"]
         state["last_changes"]      = result["changes_made"]
