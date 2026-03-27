@@ -436,6 +436,9 @@ const METHOD_COLORS = {
 
 function renderReview() {
   updateToolbar()
+  // Safety: ensure apply button is never stuck in disabled state
+  const applyBtn = document.getElementById('apply-btn')
+  if (applyBtn) applyBtn.disabled = false
   const body = document.getElementById('review-body')
   body.innerHTML = ''
 
@@ -568,15 +571,20 @@ function toggleEdit(idx) {
 
 function updateEdit(idx, val) {
   state.suggestions[idx].editedValue = val
+  // Update the value display in real-time so the user sees the change immediately
+  const valueDiv = document.querySelector('#sugg-row-' + idx + ' .sugg-value')
+  if (valueDiv) valueDiv.textContent = val
   saveProgress()
 }
 
 function acceptAll() {
+  state.suggestions.forEach((s, idx) => { if (s.status === 'edited') _captureEditValue(idx) })
   state.suggestions.forEach(s => { if (s.status !== 'rejected') s.status = 'accepted' })
   renderReview(); saveProgress()
 }
 
 function rejectAll() {
+  state.suggestions.forEach((s, idx) => { if (s.status === 'edited') _captureEditValue(idx) })
   state.suggestions.forEach(s => s.status = 'rejected')
   renderReview(); saveProgress()
 }
