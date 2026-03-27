@@ -243,6 +243,7 @@
     <div class="done-header-bar">
       <div class="done-title">✅ Enhancement Complete</div>
       <div class="done-meta" id="result-meta"></div>
+      <button class="done-btn" onclick="backToReview()">← Back to Review</button>
       <button class="done-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
       <button class="done-btn primary" onclick="downloadYaml()">⬇ Download</button>
       <button class="done-btn" onclick="resetAll()">← New File</button>
@@ -694,6 +695,15 @@ function renderDone(data, appliedCount) {
     html += `<div class="diff-line ${cls}"><span class="dl-gutter">${sign}</span><span class="dl-text">${escHtml(d.line)}</span></div>`
   })
   document.getElementById('done-diff-content').innerHTML = html
+}
+
+function backToReview() {
+  // Re-enable apply button in case it was disabled
+  const btn = document.getElementById('apply-btn')
+  btn.disabled    = false
+  btn.textContent = `Apply ${state.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length} →`
+  renderReview()
+  showPhase('review')
 }
 
 function copyYaml() {
