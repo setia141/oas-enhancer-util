@@ -60,9 +60,12 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
 
     try:
         if method == "component":
-            # Show the component section (e.g. schemas)
-            section = location.split(".")[0]
-            root = spec.get("components", {}).get(section, {})
+            # Navigate to the specific schema, not the whole section
+            parts_loc = location.split(".")
+            section    = parts_loc[0]                          # e.g. "schemas"
+            schema_name = parts_loc[1] if len(parts_loc) > 1 else None  # e.g. "User"
+            section_dict = spec.get("components", {}).get(section, {})
+            root = section_dict.get(schema_name, {}) if schema_name else section_dict
         else:
             # Show the full operation object for context
             root = spec.get("paths", {}).get(path, {}).get(method, {})

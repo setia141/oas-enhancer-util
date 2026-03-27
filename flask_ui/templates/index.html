@@ -481,7 +481,7 @@ function buildSuggRow(idx) {
   row.className = 'suggestion-row ' + status
   row.id = 'sugg-row-' + idx
 
-  const displayVal = (s.status === 'edited' && s.editedValue !== undefined) ? s.editedValue : s.value
+  const displayVal = s.editedValue !== undefined ? s.editedValue : s.value
   const valueText = s.field === 'x-ai' ? 'true'
     : s.field === 'schema_property' ? JSON.stringify(displayVal, null, 2)
     : String(displayVal)
