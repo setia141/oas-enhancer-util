@@ -68,19 +68,25 @@ async def _chat(payload: dict, timeout: int) -> str:
     POST /chat/completions with stream=True.
     Returns the concatenated tool call arguments string.
     Retries once on 429 after honouring Retry-After.
+    The sleep for 429 back-off runs OUTSIDE the asyncio.timeout context so it
+    does not consume the timeout budget and does not hold the stream open.
     """
     payload = {**payload, "stream": True}
 
+    retry_after = 0
     for attempt in range(2):
-        tool_args = ""
+        if retry_after > 0:
+            logger.warning("Rate limited (429) — retrying after %ds", retry_after)
+            await asyncio.sleep(retry_after)
+            retry_after = 0
+
         async with asyncio.timeout(timeout):
             async with _client.stream("POST", "/chat/completions", json=payload) as resp:
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("retry-after", 30))
-                    logger.warning("Rate limited (429) — waiting %ds before retry", retry_after)
-                    await asyncio.sleep(retry_after)
-                    continue
+                    continue  # exits both context managers cleanly; sleep at top of next iteration
                 resp.raise_for_status()
+                tool_args = ""
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: ") or line == "data: [DONE]":
                         continue
@@ -88,7 +94,7 @@ async def _chat(payload: dict, timeout: int) -> str:
                     for choice in chunk.get("choices", []):
                         for tc in (choice.get("delta", {}).get("tool_calls") or []):
                             tool_args += tc.get("function", {}).get("arguments", "")
-        return tool_args
+                return tool_args
 
     return ""
 
