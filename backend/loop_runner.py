@@ -1,5 +1,5 @@
 """
-Orchestrates the review → enhance loop using the OpenAI API directly.
+Orchestrates the review → enhance loop using direct HTTP calls to the OpenAI API.
 Max iterations is configurable via MAX_ITERATIONS env var (default 5).
 Yields SSE-ready dicts for streaming to the frontend.
 """
@@ -10,8 +10,8 @@ import os
 import time
 from typing import AsyncGenerator
 
+import httpx
 import yaml
-from openai import AsyncOpenAI
 from openapi_spec_validator import validate as _oas_validate
 
 from .agents.prompts import REVIEWER_INSTRUCTION, ENHANCER_INSTRUCTION
@@ -26,7 +26,10 @@ HEARTBEAT_INTERVAL = 5     # seconds between SSE keepalive pings
 REVIEWER_MODEL     = "gpt-4.1-mini"
 ENHANCER_MODEL     = "gpt-4.1"
 
-_client: AsyncOpenAI | None = None
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
+
+_client: httpx.AsyncClient | None = None
 
 
 # ── Spec helpers ───────────────────────────────────────────────────────────────
@@ -42,19 +45,47 @@ def _validate_spec(spec: dict, label: str) -> list[str]:
         return errors
 
 
-# ── OpenAI client ──────────────────────────────────────────────────────────────
-
-def init_client() -> None:
-    global _client
-    _client = AsyncOpenAI()
-    logger.info("OpenAI client ready — reviewer=%s, enhancer=%s", REVIEWER_MODEL, ENHANCER_MODEL)
-
-
-# ── Agent calls ────────────────────────────────────────────────────────────────
-
 def _to_yaml(spec: dict) -> str:
     return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
+
+# ── HTTP client ────────────────────────────────────────────────────────────────
+
+def init_client() -> None:
+    global _client
+    _client = httpx.AsyncClient(
+        base_url=OPENAI_BASE_URL,
+        headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+        http2=False,
+        timeout=httpx.Timeout(ENHANCER_TIMEOUT + 30, connect=10.0),
+    )
+    logger.info("HTTP client ready — base=%s, reviewer=%s, enhancer=%s",
+                OPENAI_BASE_URL, REVIEWER_MODEL, ENHANCER_MODEL)
+
+
+async def _chat(payload: dict, timeout: int) -> str:
+    """
+    POST /chat/completions with stream=True.
+    Returns the concatenated tool call arguments string.
+    """
+    payload["stream"] = True
+    tool_args = ""
+
+    async with asyncio.timeout(timeout):
+        async with _client.stream("POST", "/chat/completions", json=payload) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: ") or line == "data: [DONE]":
+                    continue
+                chunk = json.loads(line[6:])
+                for choice in chunk.get("choices", []):
+                    for tc in (choice.get("delta", {}).get("tool_calls") or []):
+                        tool_args += tc.get("function", {}).get("arguments", "")
+
+    return tool_args
+
+
+# ── Agent calls ────────────────────────────────────────────────────────────────
 
 async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
     spec_yaml = _to_yaml(state["current_spec"])
@@ -84,27 +115,20 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
 
     t0 = time.monotonic()
     try:
-        response = await asyncio.wait_for(
-            _client.chat.completions.create(
-                model=REVIEWER_MODEL,
-                messages=[
-                    {"role": "system", "content": REVIEWER_INSTRUCTION},
-                    {"role": "user",   "content": user_content},
-                ],
-                tools=REVIEWER_TOOLS,
-                tool_choice={"type": "function", "function": {"name": "submit_review"}},
-            ),
-            timeout=REVIEWER_TIMEOUT,
-        )
-        elapsed = time.monotonic() - t0
-        choice  = response.choices[0]
+        tool_args = await _chat({
+            "model":       REVIEWER_MODEL,
+            "messages":    [{"role": "system", "content": REVIEWER_INSTRUCTION},
+                            {"role": "user",   "content": user_content}],
+            "tools":       REVIEWER_TOOLS,
+            "tool_choice": {"type": "function", "function": {"name": "submit_review"}},
+        }, REVIEWER_TIMEOUT)
 
-        if not choice.message.tool_calls:
-            logger.warning("Iter %d | reviewer returned no tool call (finish_reason=%s, %.1fs)",
-                           iteration, choice.finish_reason, elapsed)
+        elapsed = time.monotonic() - t0
+        if not tool_args:
+            logger.warning("Iter %d | reviewer returned no tool call (%.1fs)", iteration, elapsed)
             return {"satisfied": False, "summary": "", "suggestions": []}
 
-        args = json.loads(choice.message.tool_calls[0].function.arguments)
+        args = json.loads(tool_args)
         logger.info("Iter %d | reviewer done in %.1fs — satisfied=%s, %d suggestion(s)",
                     iteration, elapsed, args.get("satisfied"), len(args.get("suggestions", [])))
         return {
@@ -112,7 +136,7 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
             "summary":     args.get("summary", ""),
             "suggestions": args.get("suggestions", []),
         }
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("Iter %d | reviewer timed out after %ds", iteration, REVIEWER_TIMEOUT)
     except Exception as e:
         logger.error("Iter %d | reviewer error: %s", iteration, e, exc_info=True)
@@ -121,7 +145,6 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
 
 
 async def _run_enhancer(state: dict, iteration: int) -> dict:
-    """Enhance the full OAS spec in one call. Returns enhanced spec and changes."""
     spec_yaml   = _to_yaml(state["current_spec"])
     suggestions = state.get("review_suggestions", [])
 
@@ -141,28 +164,21 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
     logger.info("Iter %d | enhancer starting — %d bytes", iteration, len(spec_yaml))
     t0 = time.monotonic()
     try:
-        response = await asyncio.wait_for(
-            _client.chat.completions.create(
-                model=ENHANCER_MODEL,
-                messages=[
-                    {"role": "system", "content": ENHANCER_INSTRUCTION},
-                    {"role": "user",   "content": user_content},
-                ],
-                tools=ENHANCER_TOOLS,
-                tool_choice={"type": "function", "function": {"name": "save_enhanced_spec"}},
-                max_tokens=32768,
-            ),
-            timeout=ENHANCER_TIMEOUT,
-        )
-        elapsed = time.monotonic() - t0
-        choice  = response.choices[0]
+        tool_args = await _chat({
+            "model":       ENHANCER_MODEL,
+            "messages":    [{"role": "system", "content": ENHANCER_INSTRUCTION},
+                            {"role": "user",   "content": user_content}],
+            "tools":       ENHANCER_TOOLS,
+            "tool_choice": {"type": "function", "function": {"name": "save_enhanced_spec"}},
+            "max_tokens":  32768,
+        }, ENHANCER_TIMEOUT)
 
-        if not choice.message.tool_calls:
-            logger.warning("Iter %d | enhancer returned no tool call (finish_reason=%s, %.1fs)",
-                           iteration, choice.finish_reason, elapsed)
+        elapsed = time.monotonic() - t0
+        if not tool_args:
+            logger.warning("Iter %d | enhancer returned no tool call (%.1fs)", iteration, elapsed)
             return {"enhanced_spec": state["current_spec"], "changes_made": []}
 
-        args     = json.loads(choice.message.tool_calls[0].function.arguments)
+        args     = json.loads(tool_args)
         enhanced = args.get("enhanced_spec", state["current_spec"])
         changes  = args.get("changes_made", [])
 
@@ -170,7 +186,7 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
                     iteration, elapsed, len(changes), len(enhanced.get("paths", {})))
         return {"enhanced_spec": enhanced, "changes_made": changes}
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("Iter %d | enhancer timed out after %ds", iteration, ENHANCER_TIMEOUT)
     except Exception as e:
         logger.error("Iter %d | enhancer error: %s", iteration, e, exc_info=True)
@@ -204,7 +220,7 @@ async def run_enhancement_loop(
     max_iterations: int = MAX_ITERATIONS,
 ) -> AsyncGenerator[dict, None]:
     if not _client:
-        raise RuntimeError("OpenAI client not initialised — call init_client() first")
+        raise RuntimeError("HTTP client not initialised — call init_client() first")
 
     current_spec  = json.loads(oas_json) if isinstance(oas_json, str) else oas_json
     original_spec = json.loads(json.dumps(current_spec))  # deep copy
