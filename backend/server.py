@@ -107,9 +107,19 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
 
 
 def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
-    """Attach yaml_context to each suggestion."""
+    """Validate, then attach yaml_context to each suggestion.
+
+    Any suggestion that would fail to apply (wrong location, $ref sibling,
+    path not found, etc.) is silently dropped here so it never reaches the UI.
+    """
+    import copy
     enriched = []
     for s in suggestions:
+        try:
+            _apply_suggestion(copy.deepcopy(spec), s)
+        except Exception as e:
+            logger.warning("Dropping invalid suggestion %s → %s: %s", s.get("method"), s.get("location"), e)
+            continue
         ctx = _get_yaml_context(spec, s)
         enriched.append({**s, "yaml_context": ctx})
     return enriched
