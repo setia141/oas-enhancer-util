@@ -109,42 +109,15 @@
     .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #f4a234; border-radius:6px; resize:vertical; min-height:48px; }
 
     /* Result */
-    .result-card { width:100%; max-width:1100px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
-    .result-header { padding:14px 20px; background:linear-gradient(135deg,#34a853,#4285f4); color:#fff; display:flex; align-items:center; gap:12px; flex-shrink:0; }
-    .result-header .rh-info { flex:1; }
-    .result-header h2 { font-weight:700; font-size:16px; }
-    .result-header p  { font-size:12px; opacity:.9; margin-top:2px; }
-    .new-btn { padding:7px 14px; font-size:13px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4); border-radius:8px; color:#fff; cursor:pointer; font-family:inherit; }
-    .tab-bar { display:flex; align-items:center; border-bottom:1px solid #e8eaed; padding:0 16px; flex-shrink:0; }
-    .tab-btn { padding:10px 14px; font-size:13px; font-weight:400; color:#666; border:none; border-bottom:2px solid transparent; background:none; cursor:pointer; font-family:inherit; }
-    .tab-btn.active { font-weight:600; color:#4285f4; border-bottom-color:#4285f4; }
-    .tab-actions { margin-left:auto; display:flex; gap:8px; }
-    .action-btn { padding:6px 12px; font-size:12px; background:#fff; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; font-family:inherit; color:#444; }
-    .action-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
-    .tab-content { flex:1; overflow:hidden; display:flex; flex-direction:column; }
-    #tab-yaml { margin:0; padding:16px 20px; font-size:12px; line-height:1.6; background:#1e1e2e; color:#cdd6f4; flex:1; overflow:auto; font-family:monospace; white-space:pre; }
-    #tab-diff { display:flex; flex-direction:column; height:100%; }
-    .diff-toolbar { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #e8eaed; background:#fafafa; flex-shrink:0; }
-    .diff-badge { font-size:12px; padding:2px 10px; border-radius:10px; font-weight:600; }
-    .diff-badge.added   { background:#e6f4ea; color:#34a853; }
-    .diff-badge.removed { background:#fce8e6; color:#ea4335; }
-    .diff-panels { display:flex; flex:1; overflow:hidden; }
-    .diff-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
-    .diff-panel-header { padding:10px 14px; background:#f8f9fa; border-bottom:1px solid #e8eaed; font-weight:600; font-size:13px; flex-shrink:0; }
-    .diff-panel-body { overflow-y:auto; font-family:monospace; font-size:12px; line-height:20px; flex:1; }
-    .diff-line { display:flex; }
-    .diff-line.added     { background:#e6f4ea; border-left:3px solid #34a853; }
-    .diff-line.removed   { background:#fce8e6; border-left:3px solid #ea4335; }
-    .diff-line.unchanged { border-left:3px solid transparent; }
-    .diff-num  { min-width:40px; text-align:right; padding-right:8px; user-select:none; flex-shrink:0; padding-top:1px; }
-    .diff-line.added .diff-num     { color:#a8d5b5; }
-    .diff-line.removed .diff-num   { color:#f5bfba; }
-    .diff-line.unchanged .diff-num { color:#ccc; }
-    .diff-text { white-space:pre; overflow:hidden; text-overflow:ellipsis; padding:1px 8px 1px 0; }
-    .diff-line.added .diff-text    { color:#1e6e35; }
-    .diff-line.removed .diff-text  { color:#c5221f; }
-    .diff-line.unchanged .diff-text{ color:#333; }
-    .diff-divider { width:1px; background:#e8eaed; flex-shrink:0; }
+    /* Done */
+    .done-card { width:100%; max-width:900px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
+    .done-header { padding:16px 24px; background:linear-gradient(135deg,#34a853,#4285f4); color:#fff; display:flex; align-items:center; gap:16px; flex-shrink:0; }
+    .done-header h2 { font-size:16px; font-weight:700; flex:1; }
+    .done-header p  { font-size:12px; opacity:.85; margin-top:2px; }
+    .done-actions { display:flex; gap:8px; }
+    .done-btn { padding:8px 16px; font-size:13px; border-radius:8px; border:1px solid rgba(255,255,255,.5); background:rgba(255,255,255,.15); color:#fff; cursor:pointer; font-family:inherit; }
+    .done-btn.primary { background:#fff; color:#34a853; border-color:#fff; font-weight:600; }
+    .done-yaml { flex:1; overflow:auto; margin:0; padding:20px 24px; font-size:12px; line-height:1.7; background:#1e1e2e; color:#cdd6f4; font-family:monospace; white-space:pre; }
 
     /* Error */
     .error-box { width:100%; max-width:560px; }
@@ -227,26 +200,19 @@
   </div>
 
   <!-- DONE -->
-  <div id="phase-done" class="result-card" style="display:none">
-    <div class="result-header">
-      <div class="rh-info">
-        <h2>✅ Done</h2>
+  <div id="phase-done" class="done-card" style="display:none">
+    <div class="done-header">
+      <div>
+        <h2>✅ Enhancement Complete</h2>
         <p id="result-meta"></p>
       </div>
-      <button class="new-btn" onclick="resetAll()">← New File</button>
-    </div>
-    <div class="tab-bar">
-      <button class="tab-btn" data-tab="diff" onclick="switchTab('diff')">Diff View</button>
-      <button class="tab-btn" data-tab="yaml" onclick="switchTab('yaml')">Enhanced YAML</button>
-      <div class="tab-actions">
-        <button class="action-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
-        <button class="action-btn primary" onclick="downloadYaml()">⬇ Download YAML</button>
+      <div class="done-actions">
+        <button class="done-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
+        <button class="done-btn primary" onclick="downloadYaml()">⬇ Download YAML</button>
+        <button class="done-btn" onclick="resetAll()">← New File</button>
       </div>
     </div>
-    <div class="tab-content">
-      <pre id="tab-yaml" style="display:none"></pre>
-      <div id="tab-diff" style="display:none"></div>
-    </div>
+    <pre id="done-yaml" class="done-yaml"></pre>
   </div>
 
   <!-- ERROR -->
@@ -671,99 +637,30 @@ async function applyAccepted() {
 }
 
 // ── Result ─────────────────────────────────────────────────────────
-let _origYaml = null
 let _finalYaml = null
 
 function renderDone(data, appliedCount) {
+  const failures = data.failed > 0 ? ` · ${data.failed} failed` : ''
   document.getElementById('result-meta').textContent =
-    `${appliedCount} changes applied · ${data.failed} failed`
-  document.getElementById('tab-yaml').textContent = data.spec_yaml || ''
-  _origYaml  = data.original_yaml || ''
-  _finalYaml = data.spec_yaml     || ''
-  renderDiff(_origYaml, _finalYaml)
-}
-
-// ── Diff ───────────────────────────────────────────────────────────
-let _showOnlyChanges = false
-let _diffData = null
-
-function computeDiff(origStr, enhStr) {
-  const origLines = origStr.split('\n')
-  const enhLines  = enhStr.split('\n')
-  const origCount = {}, enhCount = {}
-  origLines.forEach(l => origCount[l] = (origCount[l]||0)+1)
-  enhLines.forEach(l  => enhCount[l]  = (enhCount[l] ||0)+1)
-  const origResult = origLines.map(l => ({ content:l, type: (enhCount[l]||0)>0 ? 'unchanged':'removed' }))
-  const enhResult  = enhLines.map(l  => ({ content:l, type: (origCount[l]||0)>0 ? 'unchanged':'added'   }))
-  return { origResult, enhResult,
-    addedCount:   enhResult.filter(l=>l.type==='added').length,
-    removedCount: origResult.filter(l=>l.type==='removed').length }
-}
-
-function renderDiff(origStr, enhStr) {
-  _diffData = computeDiff(origStr, enhStr)
-  const c = document.getElementById('tab-diff')
-  c.innerHTML = `
-    <div class="diff-toolbar">
-      <span class="diff-badge added">+${_diffData.addedCount} added</span>
-      <span class="diff-badge removed">-${_diffData.removedCount} removed</span>
-      <div style="flex:1"></div>
-      <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="diff-changes-only" onchange="toggleDiffFilter()"> Show changes only
-      </label>
-    </div>
-    <div class="diff-panels" style="flex:1;overflow:hidden">
-      <div class="diff-panel">
-        <div class="diff-panel-header">Original</div>
-        <div class="diff-panel-body" id="diff-orig"></div>
-      </div>
-      <div class="diff-divider"></div>
-      <div class="diff-panel">
-        <div class="diff-panel-header">Enhanced</div>
-        <div class="diff-panel-body" id="diff-enh"></div>
-      </div>
-    </div>`
-  c.style.cssText = 'display:flex;flex-direction:column;height:100%'
-  paintDiff()
-}
-
-function paintDiff() {
-  const only = _showOnlyChanges
-  const oL = only ? _diffData.origResult.filter(l=>l.type!=='unchanged') : _diffData.origResult
-  const eL = only ? _diffData.enhResult.filter(l=>l.type!=='unchanged')  : _diffData.enhResult
-  document.getElementById('diff-orig').innerHTML = oL.map((l,i)=>diffLineHtml(l,i+1)).join('')
-  document.getElementById('diff-enh').innerHTML  = eL.map((l,i)=>diffLineHtml(l,i+1)).join('')
-}
-
-function diffLineHtml(line, num) {
-  const p = line.type==='added'?'+ ':line.type==='removed'?'- ':'  '
-  return `<div class="diff-line ${line.type}"><span class="diff-num">${num}</span><span class="diff-text">${p}${escHtml(line.content)}</span></div>`
-}
-
-function toggleDiffFilter() {
-  _showOnlyChanges = document.getElementById('diff-changes-only').checked
-  paintDiff()
-}
-
-function switchTab(name) {
-  ['yaml','diff'].forEach(t => {
-    document.getElementById('tab-'+t).style.display = t===name ? '' : 'none'
-    document.querySelector(`[data-tab="${t}"]`).classList.toggle('active', t===name)
-  })
+    `${appliedCount} changes applied${failures}`
+  _finalYaml = data.spec_yaml || ''
+  document.getElementById('done-yaml').textContent = _finalYaml
 }
 
 function copyYaml() {
   navigator.clipboard.writeText(_finalYaml || '')
   const btn = document.getElementById('copy-btn')
   btn.textContent = '✅ Copied'
-  setTimeout(()=>btn.textContent='📋 Copy', 2000)
+  setTimeout(() => btn.textContent = '📋 Copy', 2000)
 }
 
 function downloadYaml() {
   const name = (state.oasFile?.name || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([_finalYaml||''], {type:'text/yaml'}))
-  a.download = name; a.click(); URL.revokeObjectURL(a.href)
+  const a    = document.createElement('a')
+  a.href     = URL.createObjectURL(new Blob([_finalYaml || ''], { type:'text/yaml' }))
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 function escHtml(str) {
