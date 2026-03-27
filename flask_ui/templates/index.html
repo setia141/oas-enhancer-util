@@ -247,6 +247,8 @@ function _startTimer() {
 
 function resetAll() {
   clearInterval(_timerInterval)
+  _showOnlyChanges = false
+  _diffData = null
   state = { oasFile:null, postmanFile:null, result:null, startedAt:null }
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''

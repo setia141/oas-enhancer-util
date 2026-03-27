@@ -207,17 +207,22 @@ async def run_enhancement_loop(
     final_spec = json.loads(json.dumps(original_spec))
 
     changed_paths = result["changed_paths"]
-    if changed_paths:
+    if isinstance(changed_paths, dict) and changed_paths:
         for path, content in changed_paths.items():
             final_spec["paths"][path] = content
         logger.info("Merged %d changed path(s) into spec", len(changed_paths))
+    elif changed_paths:
+        logger.warning("changed_paths was not a dict (%s) — skipping merge", type(changed_paths).__name__)
 
     changed_components = result.get("changed_components") or {}
-    if changed_components:
+    if isinstance(changed_components, dict) and changed_components:
         final_spec.setdefault("components", {})
         for section, items in changed_components.items():
-            final_spec["components"].setdefault(section, {})
-            final_spec["components"][section].update(items)
+            if isinstance(items, dict):
+                final_spec["components"].setdefault(section, {})
+                final_spec["components"][section].update(items)
+            else:
+                logger.warning("changed_components[%s] was not a dict (%s) — skipping", section, type(items).__name__)
         logger.info("Merged changed components: %s", list(changed_components.keys()))
 
     final_validation = _validate_spec(final_spec, "final spec")

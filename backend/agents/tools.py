@@ -19,15 +19,18 @@ ENHANCER_TOOLS = [
                     "changed_paths": {
                         "type": "object",
                         "description": (
-                            "Only the paths that were modified — same structure as OAS 'paths'. "
-                            "Omit paths you did not change."
+                            "A JSON object where each key is a path string (e.g. '/users/{id}') "
+                            "and each value is the COMPLETE enhanced path item object including all "
+                            "operations, parameters, requestBody, and responses fully written out. "
+                            "Only include paths you actually modified. Do NOT just list path names."
                         ),
                     },
                     "changed_components": {
                         "type": "object",
                         "description": (
-                            "Only the component sections that were modified (e.g. schemas, responses). "
-                            "Omit sections you did not change."
+                            "A JSON object where each key is a component section name (e.g. 'schemas') "
+                            "and each value is a JSON object of the modified entries fully written out. "
+                            "Only include sections you actually modified. Do NOT just list section names."
                         ),
                     },
                 },
