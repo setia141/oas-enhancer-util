@@ -70,29 +70,34 @@
     .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
 
     /* Suggestion row */
-    .suggestion-row { display:flex; align-items:flex-start; gap:12px; padding:12px 16px; border-bottom:1px solid #f0f0f0; transition:background .15s; }
+    .suggestion-row { border-bottom:1px solid #f0f0f0; transition:background .15s; }
     .suggestion-row:last-child { border-bottom:none; }
-    .suggestion-row.accepted { background:#f0faf3; }
-    .suggestion-row.rejected { background:#fdf0ef; opacity:.6; }
-    .suggestion-row.edited   { background:#fffbf0; }
-    .sugg-left { flex:1; min-width:0; }
-    .sugg-location { font-size:11px; font-family:monospace; color:#4285f4; margin-bottom:4px; }
-    .sugg-field-badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:6px; text-transform:uppercase; }
+    .suggestion-row.accepted .sugg-card { border-left:3px solid #34a853; }
+    .suggestion-row.rejected { opacity:.5; }
+    .suggestion-row.edited   .sugg-card { border-left:3px solid #f4a234; }
+    .sugg-card { padding:12px 16px; border-left:3px solid transparent; }
+    .sugg-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .sugg-field-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; text-transform:uppercase; }
     .sugg-field-badge.description { background:#e8f0fe; color:#1a73e8; }
     .sugg-field-badge.example     { background:#e6f4ea; color:#34a853; }
     .sugg-field-badge.x-ai        { background:#f3e8fd; color:#9334e6; }
-    .sugg-value { font-size:13px; color:#333; margin-top:2px; word-break:break-word; }
-    .sugg-value.mono { font-family:monospace; background:#f8f9fa; padding:2px 6px; border-radius:4px; font-size:12px; }
-    .sugg-reason { font-size:11px; color:#999; margin-top:4px; }
-    .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #4285f4; border-radius:6px; resize:vertical; min-height:48px; }
-    .sugg-actions { display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
-    .sugg-btn { padding:5px 12px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; }
+    .sugg-location { font-size:11px; font-family:monospace; color:#666; flex:1; }
+    .sugg-actions { display:flex; gap:4px; }
+    .sugg-btn { padding:4px 10px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; }
     .sugg-btn.accept { color:#34a853; border-color:#34a853; background:#fff; }
     .sugg-btn.accept.active { background:#34a853; color:#fff; }
     .sugg-btn.edit   { color:#f4a234; border-color:#f4a234; background:#fff; }
-    .sugg-btn.edit.active { background:#f4a234; color:#fff; }
+    .sugg-btn.edit.active   { background:#f4a234; color:#fff; }
     .sugg-btn.reject { color:#ea4335; border-color:#ea4335; background:#fff; }
     .sugg-btn.reject.active { background:#ea4335; color:#fff; }
+    /* YAML context snippet */
+    .yaml-snippet { background:#1e1e2e; border-radius:8px; padding:10px 14px; font-family:monospace; font-size:12px; line-height:1.7; overflow-x:auto; margin-bottom:6px; }
+    .yaml-line { color:#cdd6f4; white-space:pre; }
+    .yaml-line.inserted { color:#a6e3a1; background:rgba(166,227,161,.12); display:block; border-radius:2px; }
+    .yaml-line.inserted::before { content:'+ '; color:#a6e3a1; }
+    .yaml-line:not(.inserted)::before { content:'  '; }
+    .sugg-reason { font-size:11px; color:#999; margin-top:6px; }
+    .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #f4a234; border-radius:6px; resize:vertical; min-height:48px; }
 
     /* Result */
     .result-card { width:100%; max-width:1100px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
@@ -434,32 +439,39 @@ function renderReview() {
 }
 
 function buildSuggRow(idx) {
-  const s   = state.suggestions[idx]
-  const row = document.createElement('div')
-  row.className = `suggestion-row ${s.status === 'accepted' || s.status === 'edited' ? 'accepted' : s.status === 'rejected' ? 'rejected' : ''}`
+  const s      = state.suggestions[idx]
+  const status = s.status
+  const row    = document.createElement('div')
+  row.className = `suggestion-row ${status}`
   row.id = `sugg-row-${idx}`
 
-  const valueDisplay = s.field === 'x-ai'
-    ? `<span class="sugg-value mono">true</span>`
-    : `<span class="sugg-value">${escHtml(String(s.value))}</span>`
+  // YAML context snippet
+  const ctx          = s.yaml_context || {}
+  const ctxLines     = (ctx.context_lines || []).map(l => `<span class="yaml-line">${escHtml(l)}</span>`).join('\n')
+  const insertedLine = ctx.inserted_line
+    ? `<span class="yaml-line inserted">${escHtml(ctx.inserted_line)}</span>`
+    : ''
+  const snippet = (ctxLines || insertedLine)
+    ? `<div class="yaml-snippet">${ctxLines}\n${insertedLine}</div>`
+    : ''
 
-  const editArea = s.status === 'edited'
-    ? `<textarea class="sugg-edit-area" id="edit-${idx}" onchange="updateEdit(${idx},this.value)">${escHtml(String(s.editedValue ?? s.value))}</textarea>`
-    : `<textarea class="sugg-edit-area" id="edit-${idx}" style="display:none" onchange="updateEdit(${idx},this.value)">${escHtml(String(s.value))}</textarea>`
+  // Edit textarea
+  const editArea = `<textarea class="sugg-edit-area" id="edit-${idx}" style="${status==='edited'?'':'display:none'}" onchange="updateEdit(${idx},this.value)">${escHtml(String(s.editedValue ?? s.value))}</textarea>`
 
   row.innerHTML = `
-    <div class="sugg-left">
-      <div class="sugg-location">
-        <span class="sugg-field-badge ${s.field}">${s.field}</span>${escHtml(s.location)}
+    <div class="sugg-card">
+      <div class="sugg-header">
+        <span class="sugg-field-badge ${s.field}">${s.field}</span>
+        <span class="sugg-location">${escHtml(s.location)}</span>
+        <div class="sugg-actions">
+          <button class="sugg-btn accept ${status==='accepted'||status==='edited'?'active':''}" onclick="setSuggStatus(${idx},'accepted')">✓ Accept</button>
+          <button class="sugg-btn edit   ${status==='edited'?'active':''}"                     onclick="toggleEdit(${idx})">✎ Edit</button>
+          <button class="sugg-btn reject ${status==='rejected'?'active':''}"                   onclick="setSuggStatus(${idx},'rejected')">✕ Reject</button>
+        </div>
       </div>
-      ${valueDisplay}
+      ${snippet}
       ${editArea}
-      ${s.reason ? `<div class="sugg-reason">${escHtml(s.reason)}</div>` : ''}
-    </div>
-    <div class="sugg-actions">
-      <button class="sugg-btn accept ${s.status==='accepted'||s.status==='edited'?'active':''}" onclick="setSuggStatus(${idx},'accepted')">✓ Accept</button>
-      <button class="sugg-btn edit   ${s.status==='edited'?'active':''}"                        onclick="toggleEdit(${idx})">✎ Edit</button>
-      <button class="sugg-btn reject ${s.status==='rejected'?'active':''}"                      onclick="setSuggStatus(${idx},'rejected')">✕ Reject</button>
+      ${s.reason ? `<div class="sugg-reason">💡 ${escHtml(s.reason)}</div>` : ''}
     </div>`
   return row
 }
