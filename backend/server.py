@@ -53,7 +53,6 @@ async def get_config():
 async def enhance_oas(
     oas_file: UploadFile = File(...),
     postman_file: UploadFile = File(None),
-    instructions: str = Form(""),
     max_iterations: int = Form(MAX_ITERATIONS),
 ):
     """
@@ -81,7 +80,7 @@ async def enhance_oas(
 
     async def event_stream():
         try:
-            async for event in run_enhancement_loop(oas_spec, postman_text, instructions, has_postman, max_iterations):
+            async for event in run_enhancement_loop(oas_spec, postman_text, has_postman, max_iterations):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

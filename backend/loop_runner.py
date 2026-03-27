@@ -24,7 +24,7 @@ REVIEWER_TIMEOUT   = 120   # seconds
 ENHANCER_TIMEOUT   = 600   # seconds
 HEARTBEAT_INTERVAL = 5     # seconds between SSE keepalive pings
 REVIEWER_MODEL     = "gpt-4.1-mini"
-ENHANCER_MODEL     = "gpt-4.1"
+ENHANCER_MODEL     = "gpt-4.1-mini"
 
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
@@ -82,7 +82,7 @@ async def _chat(payload: dict, timeout: int) -> str:
 
 # ── Agent calls ────────────────────────────────────────────────────────────────
 
-async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
+async def _run_reviewer(state: dict, iteration: int) -> dict:
     spec_yaml = _to_yaml(state["current_spec"])
     logger.info("Iter %d | reviewer starting — %d bytes, %d paths",
                 iteration, len(spec_yaml), len(state["current_spec"].get("paths", {})))
@@ -92,10 +92,8 @@ async def _run_reviewer(state: dict, instructions: str, iteration: int) -> dict:
         f"Breaking changes policy: {get_breaking_changes_policy(state)}\n\n"
         f"OAS Spec (YAML):\n{spec_yaml}"
     )
-    if state.get("postman_json"):
-        user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
-    if instructions:
-        user_content += f"\n\nAdditional instructions: {instructions}"
+    if state.get("postman_text"):
+        user_content += f"\n\nPostman Collection:\n{state['postman_text']}"
     if state.get("validation_errors"):
         user_content += (
             f"\n\nOAS validation errors that must be fixed ({len(state['validation_errors'])} total):\n"
@@ -153,8 +151,8 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
             f"\n\nOAS validation errors to fix:\n"
             + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
         )
-    if state.get("postman_json"):
-        user_content += f"\n\nPostman Collection:\n{state['postman_json']}"
+    if state.get("postman_text"):
+        user_content += f"\n\nPostman Collection:\n{state['postman_text']}"
 
     logger.info("Iter %d | enhancer starting — %d bytes", iteration, len(spec_yaml))
     t0 = time.monotonic()
@@ -215,18 +213,16 @@ async def _await_with_heartbeat(coro, label: str = ""):
 async def run_enhancement_loop(
     oas_spec:       dict,
     postman_text:   str | None,
-    instructions:   str,
     has_postman:    bool,
     max_iterations: int = MAX_ITERATIONS,
 ) -> AsyncGenerator[dict, None]:
     if not _client:
         raise RuntimeError("HTTP client not initialised — call init_client() first")
 
-    current_spec  = oas_spec
-    original_spec = json.loads(json.dumps(current_spec))  # deep copy
+    original_spec = json.loads(json.dumps(oas_spec))  # deep copy
 
-    path_count = len(current_spec.get("paths", {}))
-    spec_title = current_spec.get("info", {}).get("title", "untitled")
+    path_count = len(oas_spec.get("paths", {}))
+    spec_title = oas_spec.get("info", {}).get("title", "untitled")
     logger.info("Loop starting — %r, %d paths, max_iterations=%d, has_postman=%s",
                 spec_title, path_count, max_iterations, has_postman)
 
@@ -238,8 +234,8 @@ async def run_enhancement_loop(
     original_validation = _validate_spec(original_spec, "original spec")
 
     state: dict = {
-        "current_spec":       current_spec,
-        "postman_json":       postman_text,
+        "current_spec":       oas_spec,
+        "postman_text":       postman_text,
         "has_postman":        has_postman,
         "review_suggestions": [],
         "last_changes":       [],
@@ -247,7 +243,6 @@ async def run_enhancement_loop(
     }
 
     all_iterations:        list[dict] = []
-    last_review:           dict       = {}
     prev_suggestion_count: int        = -1
     stalled_iterations:    int        = 0
     loop_start             = time.monotonic()
@@ -263,19 +258,21 @@ async def run_enhancement_loop(
         yield {"type": "iteration_start", "iteration": iteration}
 
         # ── Reviewer ──────────────────────────────────────────────────────────
-        async for _hb in _await_with_heartbeat(_run_reviewer(state, instructions, iteration), f"iter-{iteration} reviewer"):
+        async for _hb in _await_with_heartbeat(_run_reviewer(state, iteration), f"iter-{iteration} reviewer"):
             if _hb.get("type") == "heartbeat":
                 yield _hb
             else:
                 review = _hb
 
         state["review_suggestions"] = review["suggestions"]
-        last_review = review
 
         yield {"type": "review_complete", "iteration": iteration, "data": review}
 
-        if review["satisfied"] or not review["suggestions"]:
+        if review["satisfied"]:
             logger.info("Iter %d | reviewer satisfied, stopping", iteration)
+            break
+        if not review["suggestions"]:
+            logger.info("Iter %d | reviewer returned no suggestions, stopping", iteration)
             break
 
         # ── Enhancer ──────────────────────────────────────────────────────────
@@ -292,19 +289,39 @@ async def run_enhancement_loop(
             yield {"type": "error", "message": "Enhancer output was truncated or failed. Your spec may be too large — consider splitting it by tag."}
             break
 
-        state["current_spec"]      = result["enhanced_spec"]
+        enhanced        = result["enhanced_spec"]
+        orig_path_count = len(state["current_spec"].get("paths", {}))
+        new_path_count  = len(enhanced.get("paths", {}))
+
+        # If the model returned fewer paths than the original, merge into the full spec
+        # so no paths are lost. The reviewer will catch remaining paths in the next iteration.
+        if new_path_count < orig_path_count:
+            logger.info("Iter %d | enhancer returned %d/%d paths — merging with original",
+                        iteration, new_path_count, orig_path_count)
+            merged = json.loads(json.dumps(state["current_spec"]))
+            for path, content in enhanced.get("paths", {}).items():
+                merged["paths"][path] = content
+            if "components" in enhanced:
+                merged.setdefault("components", {})
+                for section, items in enhanced["components"].items():
+                    merged["components"].setdefault(section, {})
+                    merged["components"][section].update(items)
+            enhanced = merged
+
+        new_errors = _validate_spec(enhanced, f"iter-{iteration}")
+
+        state["current_spec"]      = enhanced
         state["last_changes"]      = result["changes_made"]
-        state["validation_errors"] = _validate_spec(state["current_spec"], f"iter-{iteration}")
-        all_changes                = result["changes_made"]
+        state["validation_errors"] = new_errors
 
         all_iterations.append({
             "iteration":      iteration,
             "review_summary": review["summary"],
             "suggestions":    review["suggestions"],
-            "changes_made":   all_changes,
+            "changes_made":   result["changes_made"],
         })
         yield {"type": "enhance_complete", "iteration": iteration,
-               "data": {"changes_made": all_changes}}
+               "data": {"changes_made": result["changes_made"]}}
 
         # Stop if suggestions are not decreasing across iterations
         suggestion_count = len(review["suggestions"])
@@ -316,13 +333,9 @@ async def run_enhancement_loop(
             stalled_iterations = 0
         prev_suggestion_count = suggestion_count
 
-    total_elapsed = time.monotonic() - loop_start
-
-    final_validation = (
-        _validate_spec(state["current_spec"], "final spec")
-        if all_iterations else original_validation
-    )
-    total_changes = sum(len(it["changes_made"]) for it in all_iterations)
+    total_elapsed    = time.monotonic() - loop_start
+    final_validation = state["validation_errors"]
+    total_changes    = sum(len(it["changes_made"]) for it in all_iterations)
 
     logger.info("Loop done — %d iteration(s), %d change(s), %.1fs, validation errors: %d → %d",
                 len(all_iterations), total_changes, total_elapsed,
@@ -340,6 +353,6 @@ async def run_enhancement_loop(
         "summary": {
             "total_iterations":      len(all_iterations),
             "total_changes":         total_changes,
-            "completed_by_reviewer": last_review.get("satisfied", False),
+            "completed_by_reviewer": review.get("satisfied", False),
         },
     }
