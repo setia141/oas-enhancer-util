@@ -1,4 +1,4 @@
-"""FastAPI server — OAS enhancement loop with SSE streaming."""
+"""FastAPI server — single-pass OAS enhancer with SSE streaming."""
 import json
 import logging
 import warnings
@@ -6,18 +6,17 @@ from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
-# Suppress noisy LiteLLM/Pydantic version-mismatch serialization warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="Pydantic serializer warnings")
 
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
-from .loop_runner import init_client, run_enhancement_loop, MAX_ITERATIONS   # noqa: E402
+from .loop_runner import init_client, run_enhancement_loop   # noqa: E402
 
 
 @asynccontextmanager
@@ -43,26 +42,19 @@ def _parse_oas(content: bytes, filename: str) -> dict:
     return json.loads(text)
 
 
-@app.get("/config")
-async def get_config():
-    """Returns server-side configuration visible to the UI."""
-    return {"max_iterations": MAX_ITERATIONS}
-
-
 @app.post("/enhance")
 async def enhance_oas(
     oas_file: UploadFile = File(...),
     postman_file: UploadFile = File(None),
-    max_iterations: int = Form(MAX_ITERATIONS),
 ):
     """
-    Streams SSE events for the review→enhance loop (max 5 iterations).
+    Streams SSE events for a single-pass enhancement.
 
     Event types (newline-delimited JSON after 'data: '):
-      iteration_start   { iteration }
-      review_complete   { iteration, data: { satisfied, summary, suggestions } }
-      enhance_complete  { iteration, data: { changes_made } }
-      done              { original_spec, final_spec, iterations, summary }
+      enhance_start  {}
+      heartbeat      {}
+      done           { original_spec, final_spec, changes_made, original_validation_errors, validation_errors }
+      error          { message }
     """
     try:
         oas_spec = _parse_oas(await oas_file.read(), oas_file.filename or "spec.json")
@@ -80,7 +72,7 @@ async def enhance_oas(
 
     async def event_stream():
         try:
-            async for event in run_enhancement_loop(oas_spec, postman_text, has_postman, max_iterations):
+            async for event in run_enhancement_loop(oas_spec, postman_text, has_postman):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"

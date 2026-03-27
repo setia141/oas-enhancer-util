@@ -39,41 +39,19 @@
     .file-warn { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
     .file-warn.warn  { background:#fff8e1; color:#b45309; border:1px solid #fcd34d; }
     .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
-.submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
     .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
 
-    /* ── Progress Tracker ── */
-    .progress-card { width:100%; max-width:600px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
+    /* ── Progress ── */
+    .progress-card { width:100%; max-width:480px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
     .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
     .progress-header h2 { font-weight:700; font-size:18px; margin-bottom:4px; }
     .progress-header p { font-size:13px; opacity:.9; }
-    .progress-body { padding:24px; }
-    .iter-row { display:flex; gap:16px; margin-bottom:16px; }
-    .iter-dot-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
-    .iter-dot { width:32px; height:32px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; transition:all .3s; }
-    .iter-dot.pending { background:#ccc; }
-    .iter-dot.active  { background:#4285f4; box-shadow:0 0 0 4px #4285f433; }
-    .iter-dot.done    { background:#34a853; }
-    .iter-line { width:2px; flex:1; min-height:24px; margin-top:4px; }
-    .iter-line.done { background:#34a853; }
-    .iter-line.pending { background:#e0e0e0; }
-    .iter-content { flex:1; padding-bottom:16px; }
-    .iter-title { font-weight:600; font-size:14px; color:#1a1a1a; margin-bottom:4px; }
-    .iter-title.pending { color:#999; }
-    .iter-status { margin-left:8px; font-size:12px; font-weight:400; }
-    .iter-status.reviewing { color:#4285f4; }
-    .iter-status.enhancing { color:#f4a234; }
-    .iter-status.satisfied { color:#34a853; }
-    .review-box { background:#f8f9fa; border-radius:8px; padding:10px 14px; border:1px solid #e8eaed; margin-bottom:8px; }
-    .review-box .box-label { font-size:11px; font-weight:700; color:#888; margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
-    .review-box .box-summary { font-size:13px; color:#333; margin-bottom:6px; }
-    .review-box ul { margin:0; padding-left:16px; }
-    .review-box li { font-size:12px; color:#555; margin-bottom:2px; }
-    .more-btn { font-size:12px; color:#4285f4; cursor:pointer; margin-top:2px; background:none; border:none; padding:0; font-family:inherit; }
-    .changes-box { background:#e6f4ea; border-radius:8px; padding:10px 14px; border:1px solid #c3e6cb; }
-    .changes-box .box-label { font-size:11px; font-weight:700; color:#34a853; margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
-    .changes-box ul { margin:0; padding-left:16px; }
-    .changes-box li { font-size:12px; color:#2d6a3f; margin-bottom:2px; }
+    .progress-body { padding:32px 24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
+    .spinner { width:48px; height:48px; border:4px solid #e8eaed; border-top-color:#4285f4; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    .progress-status { font-size:14px; color:#555; text-align:center; }
+    .progress-timer { font-size:13px; color:#999; }
 
     /* ── Result Viewer ── */
     .result-card { width:100%; max-width:1100px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
@@ -123,26 +101,11 @@
     .stat-box { background:#f8f9fa; border:1px solid #e8eaed; border-radius:8px; padding:12px 14px; text-align:center; }
     .stat-value { font-size:22px; font-weight:700; }
     .stat-label { font-size:11px; color:#888; margin-top:2px; }
-    .iter-card { border:1px solid #e8eaed; border-radius:10px; overflow:hidden; margin-bottom:12px; }
-    .iter-card-header { width:100%; padding:12px 16px; display:flex; align-items:center; gap:8px; background:#f8f9fa; border:none; cursor:pointer; font-family:inherit; text-align:left; }
-    .iter-num-badge { width:28px; height:28px; border-radius:50%; background:#4285f4; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
-    .iter-card-title { flex:1; }
-    .iter-card-title h4 { font-size:13px; font-weight:600; color:#1a1a1a; }
-    .iter-card-title p { font-size:12px; color:#666; margin-top:2px; }
-    .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; margin-left:8px; }
-    .badge-blue { background:#4285f422; color:#4285f4; }
-    .badge-green { background:#34a85322; color:#34a853; }
-    .iter-card-body { padding:16px; display:flex; gap:16px; }
-    .iter-col { flex:1; }
-    .iter-col-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
-    .iter-col-label.blue { color:#4285f4; }
-    .iter-col-label.green { color:#34a853; }
-    .iter-col ul { margin:0; padding-left:16px; }
-    .iter-col li { font-size:13px; margin-bottom:6px; line-height:1.5; }
-    .iter-col li.suggestions { color:#444; }
-    .iter-col li.changes { color:#2d6a3f; }
-    .iter-col-empty { font-size:13px; color:#888; }
-    .iter-col-divider { width:1px; background:#e8eaed; }
+    .changes-list { border:1px solid #e8eaed; border-radius:10px; overflow:hidden; }
+    .changes-list-header { padding:12px 16px; background:#f8f9fa; font-size:13px; font-weight:600; color:#1a1a1a; border-bottom:1px solid #e8eaed; }
+    .changes-list ul { margin:0; padding:12px 16px 12px 32px; }
+    .changes-list li { font-size:13px; color:#2d6a3f; margin-bottom:6px; line-height:1.5; }
+    .changes-list-empty { padding:16px; font-size:13px; color:#888; }
 
     /* Endpoints tab */
     #tab-endpoints { padding:16px 20px; overflow-y:auto; }
@@ -174,7 +137,7 @@
     <div class="card-header">
       <div class="icon">📄</div>
       <h1>OAS Enhancer</h1>
-      <p>Upload your OpenAPI spec and optional Postman collection to auto-generate examples</p>
+      <p>Upload your OpenAPI spec and optional Postman collection to auto-generate descriptions and examples</p>
     </div>
     <div class="card-body">
       <div class="field">
@@ -200,25 +163,21 @@
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
       </div>
 
-      <div class="field">
-        <label>Max Iterations</label>
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px">
-          <span style="font-size:16px">🔁</span>
-          <span style="font-size:13px;color:#555">Your spec will go through up to <strong style="color:#4285f4">{{ max_iterations }}</strong> rounds of AI review and enhancement for the best results.</span>
-        </div>
-      </div>
-
       <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Enhance OAS</button>
     </div>
   </div>
 
-  <!-- ── RUNNING: Progress Tracker ── -->
+  <!-- ── RUNNING: Progress ── -->
   <div id="phase-running" class="progress-card" style="display:none">
     <div class="progress-header">
       <h2>✨ Enhancing your OAS spec</h2>
-      <p id="progress-subtitle">AI review → enhance loop · up to 5 iterations</p>
+      <p>Single-pass AI enhancement in progress</p>
     </div>
-    <div class="progress-body" id="progress-body"></div>
+    <div class="progress-body">
+      <div class="spinner"></div>
+      <div class="progress-status" id="progress-status">Analyzing and enhancing spec...</div>
+      <div class="progress-timer" id="progress-timer">0s</div>
+    </div>
   </div>
 
   <!-- ── DONE: Result Viewer ── -->
@@ -233,7 +192,7 @@
     <div class="tab-bar">
       <button class="tab-btn" data-tab="diff" onclick="switchTab('diff')">Diff View</button>
       <button class="tab-btn" data-tab="yaml" onclick="switchTab('yaml')">Enhanced YAML</button>
-      <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">Change History</button>
+      <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">Changes</button>
       <button class="tab-btn" data-tab="endpoints" onclick="switchTab('endpoints')">Endpoint Summary</button>
       <div class="tab-actions">
         <button class="action-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
@@ -261,18 +220,11 @@
 let state = {
   oasFile: null,
   postmanFile: null,
-  currentIteration: 0,
-  currentStep: 'reviewing',   // 'reviewing' | 'enhancing'
-  reviewData: {},             // { [iteration]: { satisfied, summary, suggestions } }
-  iterations: [],             // completed iteration objects
   result: null,
-  enhancingStartedAt: null,
-  errorOccurred: false,
+  startedAt: null,
 }
 
-const MAX_ITERATIONS = {{ max_iterations }}
-const SUGGESTIONS_PREVIEW = 3
-const CHANGES_PREVIEW = 4
+const CHANGES_PREVIEW = 5
 
 // ── Phase switching ────────────────────────────────────────────────
 function showPhase(name) {
@@ -283,27 +235,19 @@ function showPhase(name) {
 
 let _timerInterval = null
 
-function _startEnhancingTimer() {
+function _startTimer() {
   clearInterval(_timerInterval)
   _timerInterval = setInterval(() => {
-    const el = document.getElementById('enhancing-timer')
+    const el = document.getElementById('progress-timer')
     if (!el) { clearInterval(_timerInterval); return }
-    const secs = Math.floor((Date.now() - state.enhancingStartedAt) / 1000)
+    const secs = Math.floor((Date.now() - state.startedAt) / 1000)
     el.textContent = secs + 's'
   }, 1000)
 }
 
-function _updateActivityDot() {
-  const el = document.getElementById('enhancing-status')
-  if (!el) return
-  el.style.opacity = '0.4'
-  setTimeout(() => { if (el) el.style.opacity = '1' }, 300)
-}
-
 function resetAll() {
   clearInterval(_timerInterval)
-  state = { oasFile:null, postmanFile:null, currentIteration:0, currentStep:'reviewing', reviewData:{}, iterations:[], result:null, enhancingStartedAt:null, errorOccurred:false }
-  document.getElementById('progress-body').innerHTML = ''
+  state = { oasFile:null, postmanFile:null, result:null, startedAt:null }
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''
   dzReset('dz-oas', '📋', 'OAS / Swagger file')
@@ -329,7 +273,7 @@ function dzFile(e, id, key) {
   if (f) setFile(id, key, f)
 }
 
-const OAS_MIN_BYTES = 200
+const OAS_MIN_BYTES  = 200
 const OAS_WARN_BYTES = 80 * 1024  // 80 KB
 
 function _checkOasSize(file) {
@@ -341,7 +285,7 @@ function _checkOasSize(file) {
     document.getElementById('submit-btn').disabled = true
   } else if (file.size > OAS_WARN_BYTES) {
     warn.className = 'file-warn warn'
-    warn.textContent = `⚠ Large spec (${(file.size/1024).toFixed(0)} KB) — results may be inconsistent. Consider splitting by tag before uploading.`
+    warn.textContent = `⚠ Large spec (${(file.size/1024).toFixed(0)} KB) — the enhancer will process as many paths as possible in one pass.`
     warn.style.display = ''
   } else {
     warn.style.display = 'none'
@@ -392,22 +336,16 @@ function removePostman() {
 async function handleSubmit() {
   if (!state.oasFile) return
 
-  document.getElementById('progress-subtitle').textContent =
-    `AI review → enhance loop · up to ${MAX_ITERATIONS} iteration${MAX_ITERATIONS !== 1 ? 's' : ''}`
-
-  state.currentIteration = 0
-  state.currentStep = 'reviewing'
-  state.reviewData = {}
-  state.iterations = []
-  state.result = null
-  state.errorOccurred = false
-  renderProgress()
+  state.result    = null
+  state.startedAt = Date.now()
+  document.getElementById('progress-status').textContent = 'Analyzing and enhancing spec...'
+  document.getElementById('progress-timer').textContent = '0s'
   showPhase('running')
+  _startTimer()
 
   const form = new FormData()
   form.append('oas_file', state.oasFile)
   if (state.postmanFile) form.append('postman_file', state.postmanFile)
-  form.append('max_iterations', String(MAX_ITERATIONS))
 
   try {
     const resp = await fetch('/enhance', { method:'POST', body:form })
@@ -415,7 +353,7 @@ async function handleSubmit() {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || `Server error ${resp.status}`)
     }
-    const reader = resp.body.getReader()
+    const reader  = resp.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
 
@@ -441,165 +379,59 @@ async function handleSubmit() {
 // ── SSE Event handler ──────────────────────────────────────────────
 function handleEvent(event) {
   if (event.type === 'heartbeat') {
-    _updateActivityDot()
+    document.getElementById('progress-status').textContent = 'Still enhancing — this may take a minute...'
     return
   }
   if (event.type === 'error') {
-    state.errorOccurred = true
+    clearInterval(_timerInterval)
     document.getElementById('error-msg').textContent = '⚠ ' + event.message
     showPhase('error')
     return
   }
-  if (event.type === 'iteration_start') {
-    state.currentIteration = event.iteration
-    state.currentStep = 'reviewing'
-    renderProgress()
-  }
-  if (event.type === 'review_complete') {
-    state.reviewData[event.iteration] = event.data
-    renderProgress()
-  }
   if (event.type === 'enhance_start') {
-    state.currentStep = 'enhancing'
-    state.enhancingStartedAt = Date.now()
-    renderProgress()
-    _startEnhancingTimer()
-  }
-  if (event.type === 'enhance_complete') {
-    const rd = state.reviewData[event.iteration] || {}
-    state.iterations.push({
-      iteration:      event.iteration,
-      review_summary: rd.summary || '',
-      suggestions:    rd.suggestions || [],
-      changes_made:   event.data.changes_made,
-    })
-    renderProgress()
+    document.getElementById('progress-status').textContent = 'Enhancing spec...'
   }
   if (event.type === 'done') {
-    if (state.errorOccurred) return
+    clearInterval(_timerInterval)
     state.result = event
-    state.iterations = event.iterations
-    renderProgress()
     renderResult()
     showPhase('done')
     switchTab('diff')
   }
 }
 
-// ── Progress Tracker ───────────────────────────────────────────────
-function renderProgress() {
-  const body = document.getElementById('progress-body')
-  body.innerHTML = ''
-
-  for (let num = 1; num <= MAX_ITERATIONS; num++) {
-    const iterData  = state.iterations.find(it => it.iteration === num)
-    const reviewFor = state.reviewData[num]
-    const isDone    = iterData !== undefined
-    const isActive  = !isDone && num === state.currentIteration
-    const isSkipped = reviewFor?.satisfied && num === state.currentIteration
-
-    let dotClass = 'pending', dotText = String(num)
-    if (isDone || isSkipped) { dotClass = 'done'; dotText = '✓' }
-    else if (isActive)       { dotClass = 'active' }
-
-    let statusHtml = ''
-    if (isSkipped) {
-      statusHtml = '<span class="iter-status satisfied">✓ reviewer satisfied — done early</span>'
-    } else if (isActive) {
-      if (state.currentStep === 'reviewing') {
-        statusHtml = '<span class="iter-status reviewing">● reviewing...</span>'
-      } else {
-        const secs = state.enhancingStartedAt ? Math.floor((Date.now() - state.enhancingStartedAt) / 1000) : 0
-        statusHtml = `<span class="iter-status enhancing" id="enhancing-status">● enhancing spec... <span id="enhancing-timer">${secs}s</span></span>`
-      }
-    }
-
-    let reviewHtml = ''
-    if (reviewFor) {
-      const suggs = reviewFor.suggestions || []
-      const preview = suggs.slice(0, SUGGESTIONS_PREVIEW)
-      let listHtml  = preview.map(s => `<li>${escHtml(s)}</li>`).join('')
-      listHtml += makeExpandBtn(suggs, SUGGESTIONS_PREVIEW)
-      reviewHtml = `
-        <div class="review-box">
-          <div class="box-label">Reviewer</div>
-          <div class="box-summary">${escHtml(reviewFor.summary)}</div>
-          ${suggs.length > 0 ? `<ul>${listHtml}</ul>` : ''}
-        </div>`
-    }
-
-    let changesHtml = ''
-    if (iterData && iterData.changes_made?.length > 0) {
-      const changes = iterData.changes_made
-      const preview = changes.slice(0, CHANGES_PREVIEW)
-      let listHtml  = preview.map(c => `<li>${escHtml(c)}</li>`).join('')
-      listHtml += makeExpandBtn(changes, CHANGES_PREVIEW)
-      changesHtml = `
-        <div class="changes-box">
-          <div class="box-label">Changes Applied</div>
-          <ul>${listHtml}</ul>
-        </div>`
-    }
-
-    const isLast = num === MAX_ITERATIONS
-    const lineClass = isDone ? 'done' : 'pending'
-
-    body.innerHTML += `
-      <div class="iter-row">
-        <div class="iter-dot-col">
-          <div class="iter-dot ${dotClass}">${dotText}</div>
-          ${!isLast ? `<div class="iter-line ${lineClass}"></div>` : ''}
-        </div>
-        <div class="iter-content">
-          <div class="iter-title ${dotClass === 'pending' ? 'pending' : ''}">
-            Iteration ${num}${statusHtml}
-          </div>
-          ${reviewHtml}
-          ${changesHtml}
-        </div>
-      </div>`
-  }
-}
-
 // ── Result Viewer ──────────────────────────────────────────────────
 function renderResult() {
-  const r = state.result
-  const pathCount    = Object.keys(r.final_spec?.paths || {}).length
+  const r          = state.result
+  const pathCount  = Object.keys(r.final_spec?.paths || {}).length
   const exampleCount = countExamples(r.final_spec)
-  const iters        = r.summary?.total_iterations ?? 0
-  const changes      = r.summary?.total_changes ?? 0
-  const origErrors   = (r.original_validation_errors || []).length
-  const finalErrors  = (r.validation_errors || []).length
+  const changes    = (r.changes_made || []).length
+  const origErrors = (r.original_validation_errors || []).length
+  const finalErrors = (r.validation_errors || []).length
+
   let validationNote = ''
-  if (origErrors === 0 && finalErrors === 0) {
-    // no note
-  } else if (origErrors === 0 && finalErrors > 0) {
-    validationNote = ` · ❌ ${finalErrors} validation error${finalErrors !== 1 ? 's' : ''} introduced by enhancement`
+  if (origErrors === 0 && finalErrors > 0) {
+    validationNote = ` · ❌ ${finalErrors} validation error${finalErrors !== 1 ? 's' : ''} introduced`
   } else if (finalErrors > origErrors) {
-    validationNote = ` · ❌ validation errors increased: ${origErrors} → ${finalErrors}`
+    validationNote = ` · ❌ validation errors: ${origErrors} → ${finalErrors}`
   } else if (finalErrors < origErrors) {
-    validationNote = ` · ⚠ ${origErrors} validation errors in original → ${finalErrors} after enhancement`
-  } else {
+    validationNote = ` · ⚠ validation errors: ${origErrors} → ${finalErrors}`
+  } else if (finalErrors > 0) {
     validationNote = ` · ⚠ ${origErrors} validation error${origErrors !== 1 ? 's' : ''} (unchanged)`
   }
+
   const origPathCount = Object.keys(r.original_spec?.paths || {}).length
   const droppedPaths  = origPathCount - pathCount
   if (droppedPaths > 0) {
-    validationNote += ` · ❌ ${droppedPaths} path${droppedPaths > 1 ? 's' : ''} dropped by enhancer`
+    validationNote += ` · ❌ ${droppedPaths} path${droppedPaths > 1 ? 's' : ''} dropped`
   }
+
   document.getElementById('result-meta').textContent =
-    `${pathCount} endpoints · ${exampleCount} examples · ${iters} iteration${iters !== 1 ? 's' : ''} · ${changes} total changes${validationNote}`
+    `${pathCount} endpoints · ${exampleCount} examples · ${changes} changes${validationNote}`
 
-  // YAML tab
   document.getElementById('tab-yaml').textContent = r.final_spec_yaml || ''
-
-  // Diff tab
   renderDiff(r.original_spec_yaml || '', r.final_spec_yaml || '')
-
-  // Summary tab
-  renderSummary(r.iterations, r.summary)
-
-  // Endpoints tab
+  renderSummary(r.changes_made || [], origErrors, finalErrors)
   renderEndpoints(r.final_spec)
 }
 
@@ -630,17 +462,13 @@ let _diffData = null
 function computeDiff(origStr, enhStr) {
   const origLines = origStr.split('\n')
   const enhLines  = enhStr.split('\n')
-
   const origCount = {}, enhCount = {}
   origLines.forEach(l => origCount[l] = (origCount[l] || 0) + 1)
   enhLines.forEach(l  => enhCount[l]  = (enhCount[l]  || 0) + 1)
-
   const origResult = origLines.map(line => ({ content: line, type: (enhCount[line] || 0) > 0 ? 'unchanged' : 'removed' }))
   const enhResult  = enhLines.map(line  => ({ content: line, type: (origCount[line] || 0) > 0 ? 'unchanged' : 'added'   }))
-
   return {
-    origResult,
-    enhResult,
+    origResult, enhResult,
     addedCount:   enhResult.filter(l => l.type === 'added').length,
     removedCount: origResult.filter(l => l.type === 'removed').length,
   }
@@ -700,58 +528,30 @@ function toggleDiffFilter() {
 }
 
 // ── Summary ────────────────────────────────────────────────────────
-function renderSummary(iterations, summary) {
-  const completedBy = summary?.completed_by_reviewer ? 'Reviewer ✓' : 'Max Iterations'
-  const cbColor     = summary?.completed_by_reviewer ? '#34a853' : '#fbbc04'
+function renderSummary(changesMade, origErrors, finalErrors) {
   const stats = [
-    { label:'Iterations Run', value: summary?.total_iterations ?? iterations.length, color:'#4285f4' },
-    { label:'Total Changes',  value: summary?.total_changes ?? 0,                   color:'#34a853' },
-    { label:'Completed By',   value: completedBy,                                   color: cbColor  },
+    { label:'Changes Applied', value: changesMade.length, color:'#34a853' },
+    { label:'Original Errors', value: origErrors,         color: origErrors > 0 ? '#ea4335' : '#34a853' },
+    { label:'Final Errors',    value: finalErrors,        color: finalErrors > origErrors ? '#ea4335' : finalErrors > 0 ? '#fbbc04' : '#34a853' },
   ]
   let html = `<div class="stats-grid">${stats.map(s =>
     `<div class="stat-box"><div class="stat-value" style="color:${s.color}">${s.value}</div><div class="stat-label">${s.label}</div></div>`
   ).join('')}</div>`
 
-  iterations.forEach((it, i) => {
-    const isLast = i === iterations.length - 1
-    const suggs   = (it.suggestions || []).map(s => `<li class="suggestions">${escHtml(s)}</li>`).join('') || '<div class="iter-col-empty">No suggestions</div>'
-    const changes  = (it.changes_made || []).map(c => `<li class="changes">${escHtml(c)}</li>`).join('') || '<div class="iter-col-empty">No changes recorded</div>'
+  if (changesMade.length > 0) {
+    const preview = changesMade.slice(0, CHANGES_PREVIEW)
+    let listHtml  = preview.map(c => `<li>${escHtml(c)}</li>`).join('')
+    listHtml += makeExpandBtn(changesMade, CHANGES_PREVIEW)
     html += `
-      <div class="iter-card">
-        <button class="iter-card-header" onclick="toggleCard(this)">
-          <div class="iter-num-badge">${it.iteration}</div>
-          <div class="iter-card-title">
-            <h4>Iteration ${it.iteration}
-              <span class="badge badge-blue">${(it.suggestions||[]).length} suggestions</span>
-              <span class="badge badge-green">${(it.changes_made||[]).length} changes</span>
-            </h4>
-            <p>${escHtml(it.review_summary)}</p>
-          </div>
-          <span style="font-size:16px;color:#888">${isLast ? '▲' : '▼'}</span>
-        </button>
-        <div class="iter-card-body" ${isLast ? '' : 'style="display:none"'}>
-          <div class="iter-col">
-            <div class="iter-col-label blue">Reviewer Suggestions</div>
-            <ul>${suggs}</ul>
-          </div>
-          <div class="iter-col-divider"></div>
-          <div class="iter-col">
-            <div class="iter-col-label green">Changes Applied</div>
-            <ul>${changes}</ul>
-          </div>
-        </div>
+      <div class="changes-list">
+        <div class="changes-list-header">Changes Applied (${changesMade.length})</div>
+        <ul>${listHtml}</ul>
       </div>`
-  })
+  } else {
+    html += `<div class="changes-list"><div class="changes-list-empty">No changes recorded.</div></div>`
+  }
 
   document.getElementById('tab-summary').innerHTML = html
-}
-
-function toggleCard(btn) {
-  const body = btn.nextElementSibling
-  const arrow = btn.querySelector('span:last-child')
-  const hidden = body.style.display === 'none'
-  body.style.display = hidden ? 'flex' : 'none'
-  arrow.textContent  = hidden ? '▲' : '▼'
 }
 
 // ── Endpoints ──────────────────────────────────────────────────────
@@ -796,7 +596,7 @@ function copyYaml() {
 
 function downloadYaml() {
   const yaml = state.result?.final_spec_yaml || ''
-  const name = (state.originalFilename || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
+  const name = (state.oasFile?.name || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
   triggerDownload(yaml, name, 'text/yaml')
 }
 
@@ -824,7 +624,7 @@ function toggleMore(btn) {
   const items = _expandData.get(parseInt(btn.dataset.eid))
   if (btn.dataset.expanded === '1') {
     btn.parentElement.querySelectorAll('.extra-item').forEach(el => el.remove())
-    btn.textContent   = `+${items.length} more — click to expand`
+    btn.textContent      = `+${items.length} more — click to expand`
     btn.dataset.expanded = '0'
   } else {
     items.forEach(text => {
@@ -833,7 +633,7 @@ function toggleMore(btn) {
       li.innerHTML  = escHtml(text)
       btn.parentElement.insertBefore(li, btn)
     })
-    btn.textContent   = '▲ show less'
+    btn.textContent      = '▲ show less'
     btn.dataset.expanded = '1'
   }
 }
@@ -846,6 +646,11 @@ function escHtml(str) {
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
 }
+
+// missing style for more-btn
+const style = document.createElement('style')
+style.textContent = '.more-btn { font-size:12px; color:#4285f4; cursor:pointer; margin-top:6px; background:none; border:none; padding:0; font-family:inherit; display:block; }'
+document.head.appendChild(style)
 </script>
 </body>
 </html>

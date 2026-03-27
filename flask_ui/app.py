@@ -1,6 +1,6 @@
 """
 Flask frontend — common homepage + OAS Enhancer util.
-Proxies /enhance (SSE) and /convert to the FastAPI backend.
+Proxies /enhance (SSE) to the FastAPI backend.
 """
 import os
 import requests
@@ -13,7 +13,6 @@ app = Flask(__name__)
 
 BACKEND_URL         = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 REDUNDANCY_UTIL_URL = os.environ.get("REDUNDANCY_UTIL_URL", "#")
-MAX_ITERATIONS      = int(os.environ.get("MAX_ITERATIONS", 5))
 
 
 @app.route("/")
@@ -23,7 +22,7 @@ def home():
 
 @app.route("/oas-enhancer")
 def oas_enhancer():
-    return render_template("index.html", max_iterations=MAX_ITERATIONS)
+    return render_template("index.html")
 
 
 @app.route("/enhance", methods=["POST"])
@@ -37,17 +36,10 @@ def enhance():
         if f.filename:
             files["postman_file"] = (f.filename, f.read(), f.content_type or "application/octet-stream")
 
-    data = {}
-    if request.form.get("instructions"):
-        data["instructions"] = request.form["instructions"]
-    if request.form.get("max_iterations"):
-        data["max_iterations"] = request.form["max_iterations"]
-
     def generate():
         with requests.post(
             f"{BACKEND_URL}/enhance",
             files=files,
-            data=data,
             stream=True,
             timeout=600,
         ) as r:

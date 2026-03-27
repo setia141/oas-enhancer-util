@@ -2,63 +2,44 @@
 OpenAI function tool schemas and state helper functions.
 """
 
-REVIEWER_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "submit_review",
-            "description": "Submit the review result after analysing the OAS specification.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "satisfied": {
-                        "type": "boolean",
-                        "description": "True if the spec needs no further improvements.",
-                    },
-                    "summary": {
-                        "type": "string",
-                        "description": "Brief description of the overall state of the spec.",
-                    },
-                    "suggestions": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of specific, actionable improvement instructions.",
-                    },
-                },
-                "required": ["satisfied", "summary", "suggestions"],
-            },
-        },
-    }
-]
-
 ENHANCER_TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "save_enhanced_spec",
-            "description": "Save the fully enhanced OAS specification after applying all suggestions.",
+            "description": "Save the changes made to the OAS specification.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "changes_made": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Human-readable list of every change applied in this iteration.",
+                        "description": "Human-readable list of every change applied.",
                     },
-                    "enhanced_spec": {
+                    "changed_paths": {
                         "type": "object",
-                        "description": "The COMPLETE enhanced OAS 3.x object — not a diff or partial update.",
+                        "description": (
+                            "Only the paths that were modified — same structure as OAS 'paths'. "
+                            "Omit paths you did not change."
+                        ),
+                    },
+                    "changed_components": {
+                        "type": "object",
+                        "description": (
+                            "Only the component sections that were modified (e.g. schemas, responses). "
+                            "Omit sections you did not change."
+                        ),
                     },
                 },
-                "required": ["changes_made", "enhanced_spec"],
+                "required": ["changes_made", "changed_paths"],
             },
         },
     }
 ]
 
 
-def get_breaking_changes_policy(state: dict) -> str:
-    if state.get("has_postman", False):
+def get_breaking_changes_policy(has_postman: bool) -> str:
+    if has_postman:
         return (
             "A Postman collection IS available. Breaking changes ARE allowed — "
             "align the spec with the Postman collection if responses or schemas differ."

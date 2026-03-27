@@ -1,6 +1,6 @@
 """
-Orchestrates the review → enhance loop using direct HTTP calls to the OpenAI API.
-Max iterations is configurable via MAX_ITERATIONS env var (default 5).
+Single-pass OAS enhancer using direct HTTP calls to the OpenAI API.
+Sends the full spec, receives only changed paths/components, merges back.
 Yields SSE-ready dicts for streaming to the frontend.
 """
 import asyncio
@@ -14,24 +14,21 @@ import httpx
 import yaml
 from openapi_spec_validator import validate as _oas_validate
 
-from .agents.prompts import REVIEWER_INSTRUCTION, ENHANCER_INSTRUCTION
-from .agents.tools import REVIEWER_TOOLS, ENHANCER_TOOLS, get_breaking_changes_policy
+from .agents.prompts import ENHANCER_INSTRUCTION
+from .agents.tools import ENHANCER_TOOLS, get_breaking_changes_policy
 
 logger = logging.getLogger(__name__)
 
 # ── LLM call logger (writes to llm_calls.log) ──────────────────────────────────
 _llm_logger = logging.getLogger("llm_calls")
 _llm_logger.setLevel(logging.DEBUG)
-_llm_logger.propagate = False  # don't send to root logger / console
+_llm_logger.propagate = False
 _llm_log_handler = logging.FileHandler("llm_calls.log", encoding="utf-8")
 _llm_log_handler.setFormatter(logging.Formatter("%(asctime)s\n%(message)s\n"))
 _llm_logger.addHandler(_llm_log_handler)
 
-MAX_ITERATIONS     = int(os.environ.get("MAX_ITERATIONS", 5))
-REVIEWER_TIMEOUT   = 120   # seconds
 ENHANCER_TIMEOUT   = 600   # seconds
 HEARTBEAT_INTERVAL = 5     # seconds between SSE keepalive pings
-REVIEWER_MODEL     = "gpt-4.1-mini"
 ENHANCER_MODEL     = "gpt-4.1-mini"
 
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -67,8 +64,7 @@ def init_client() -> None:
         http2=False,
         timeout=httpx.Timeout(ENHANCER_TIMEOUT + 30, connect=10.0),
     )
-    logger.info("HTTP client ready — base=%s, reviewer=%s, enhancer=%s",
-                OPENAI_BASE_URL, REVIEWER_MODEL, ENHANCER_MODEL)
+    logger.info("HTTP client ready — base=%s, model=%s", OPENAI_BASE_URL, ENHANCER_MODEL)
 
 
 async def _chat(payload: dict, timeout: int) -> str:
@@ -90,81 +86,25 @@ async def _chat(payload: dict, timeout: int) -> str:
     return tool_args
 
 
-# ── Agent calls ────────────────────────────────────────────────────────────────
+# ── Enhancer call ──────────────────────────────────────────────────────────────
 
-async def _run_reviewer(state: dict, iteration: int) -> dict:
-    spec_yaml = _to_yaml(state["current_spec"])
-    logger.info("Iter %d | reviewer starting — %d bytes, %d paths",
-                iteration, len(spec_yaml), len(state["current_spec"].get("paths", {})))
+async def _run_enhancer(oas_spec: dict, postman_text: str | None, has_postman: bool,
+                        validation_errors: list[str]) -> dict:
+    spec_yaml = _to_yaml(oas_spec)
+    logger.info("Enhancer starting — %d bytes, %d paths", len(spec_yaml), len(oas_spec.get("paths", {})))
 
     user_content = (
-        f"Iteration {iteration}: Review the OAS specification below.\n\n"
-        f"Breaking changes policy: {get_breaking_changes_policy(state)}\n\n"
+        f"Breaking changes policy: {get_breaking_changes_policy(has_postman)}\n\n"
         f"OAS Spec (YAML):\n{spec_yaml}"
     )
-    if state.get("postman_text"):
-        user_content += f"\n\nPostman Collection:\n{state['postman_text']}"
-    if state.get("validation_errors"):
-        user_content += (
-            f"\n\nOAS validation errors that must be fixed ({len(state['validation_errors'])} total):\n"
-            + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
-        )
-    if iteration > 1 and state.get("last_changes"):
-        user_content += (
-            "\n\nNote: The previous iteration already applied these changes:\n"
-            + "\n".join(f"- {c}" for c in state["last_changes"])
-            + "\nOnly flag issues still present in the spec above."
-        )
-
-    t0 = time.monotonic()
-    try:
-        tool_args = await _chat({
-            "model":       REVIEWER_MODEL,
-            "messages":    [{"role": "system", "content": REVIEWER_INSTRUCTION},
-                            {"role": "user",   "content": user_content}],
-            "tools":       REVIEWER_TOOLS,
-            "tool_choice": {"type": "function", "function": {"name": "submit_review"}},
-        }, REVIEWER_TIMEOUT)
-
-        elapsed = time.monotonic() - t0
-        if not tool_args:
-            logger.warning("Iter %d | reviewer returned no tool call (%.1fs)", iteration, elapsed)
-            return {"satisfied": False, "summary": "", "suggestions": []}
-
-        args = json.loads(tool_args)
-        logger.info("Iter %d | reviewer done in %.1fs — satisfied=%s, %d suggestion(s)",
-                    iteration, elapsed, args.get("satisfied"), len(args.get("suggestions", [])))
-        return {
-            "satisfied":   bool(args.get("satisfied", False)),
-            "summary":     args.get("summary", ""),
-            "suggestions": args.get("suggestions", []),
-        }
-    except TimeoutError:
-        logger.error("Iter %d | reviewer timed out after %ds", iteration, REVIEWER_TIMEOUT)
-    except Exception as e:
-        logger.error("Iter %d | reviewer error: %s", iteration, e, exc_info=True)
-
-    return {"satisfied": False, "summary": "", "suggestions": []}
-
-
-async def _run_enhancer(state: dict, iteration: int) -> dict:
-    spec_yaml   = _to_yaml(state["current_spec"])
-    suggestions = state.get("review_suggestions", [])
-
-    user_content = (
-        f"Breaking changes policy: {get_breaking_changes_policy(state)}\n\n"
-        f"Suggestions to apply:\n{json.dumps(suggestions, indent=2)}\n\n"
-        f"OAS Spec to enhance (YAML):\n{spec_yaml}"
-    )
-    if state.get("validation_errors"):
+    if validation_errors:
         user_content += (
             f"\n\nOAS validation errors to fix:\n"
-            + "\n".join(f"- {e}" for e in state["validation_errors"][:20])
+            + "\n".join(f"- {e}" for e in validation_errors[:20])
         )
-    if state.get("postman_text"):
-        user_content += f"\n\nPostman Collection:\n{state['postman_text']}"
+    if postman_text:
+        user_content += f"\n\nPostman Collection:\n{postman_text}"
 
-    logger.info("Iter %d | enhancer starting — %d bytes", iteration, len(spec_yaml))
     t0 = time.monotonic()
     try:
         tool_args = await _chat({
@@ -173,33 +113,39 @@ async def _run_enhancer(state: dict, iteration: int) -> dict:
                             {"role": "user",   "content": user_content}],
             "tools":       ENHANCER_TOOLS,
             "tool_choice": {"type": "function", "function": {"name": "save_enhanced_spec"}},
-            "max_tokens":  32768,
+            "max_tokens":  16384,
         }, ENHANCER_TIMEOUT)
 
         elapsed = time.monotonic() - t0
         if not tool_args:
-            logger.warning("Iter %d | enhancer returned no tool call (%.1fs)", iteration, elapsed)
-            return {"enhanced_spec": state["current_spec"], "changes_made": []}
+            logger.warning("Enhancer returned no tool call (%.1fs)", elapsed)
+            return {"changed_paths": {}, "changed_components": {}, "changes_made": []}
 
         try:
             args = json.loads(tool_args)
         except json.JSONDecodeError:
-            logger.error("Iter %d | enhancer output truncated (max_tokens hit) — spec too large, no changes applied", iteration)
-            return {"enhanced_spec": state["current_spec"], "changes_made": [], "truncated": True}
+            logger.error("Enhancer output truncated (max_tokens hit)")
+            return {"changed_paths": {}, "changed_components": {}, "changes_made": [], "truncated": True}
 
-        enhanced = args.get("enhanced_spec", state["current_spec"])
-        changes  = args.get("changes_made", [])
+        changed_paths      = args.get("changed_paths", {})
+        changed_components = args.get("changed_components", {})
+        changes_made       = args.get("changes_made", [])
 
-        logger.info("Iter %d | enhancer done in %.1fs — %d change(s), %d paths",
-                    iteration, elapsed, len(changes), len(enhanced.get("paths", {})))
-        return {"enhanced_spec": enhanced, "changes_made": changes, "truncated": False}
+        logger.info("Enhancer done in %.1fs — %d path(s) changed, %d change(s)",
+                    elapsed, len(changed_paths), len(changes_made))
+        return {
+            "changed_paths":      changed_paths,
+            "changed_components": changed_components,
+            "changes_made":       changes_made,
+            "truncated":          False,
+        }
 
     except TimeoutError:
-        logger.error("Iter %d | enhancer timed out after %ds", iteration, ENHANCER_TIMEOUT)
+        logger.error("Enhancer timed out after %ds", ENHANCER_TIMEOUT)
     except Exception as e:
-        logger.error("Iter %d | enhancer error: %s", iteration, e, exc_info=True)
+        logger.error("Enhancer error: %s", e, exc_info=True)
 
-    return {"enhanced_spec": state["current_spec"], "changes_made": [], "truncated": True}
+    return {"changed_paths": {}, "changed_components": {}, "changes_made": [], "truncated": True}
 
 
 # ── Heartbeat helper ───────────────────────────────────────────────────────────
@@ -218,13 +164,12 @@ async def _await_with_heartbeat(coro, label: str = ""):
     yield task.result()
 
 
-# ── Main loop ──────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 async def run_enhancement_loop(
-    oas_spec:       dict,
-    postman_text:   str | None,
-    has_postman:    bool,
-    max_iterations: int = MAX_ITERATIONS,
+    oas_spec:     dict,
+    postman_text: str | None,
+    has_postman:  bool,
 ) -> AsyncGenerator[dict, None]:
     if not _client:
         raise RuntimeError("HTTP client not initialised — call init_client() first")
@@ -233,136 +178,60 @@ async def run_enhancement_loop(
 
     path_count = len(oas_spec.get("paths", {}))
     spec_title = oas_spec.get("info", {}).get("title", "untitled")
-    logger.info("Loop starting — %r, %d paths, max_iterations=%d, has_postman=%s",
-                spec_title, path_count, max_iterations, has_postman)
+    logger.info("Enhancement starting — %r, %d paths, has_postman=%s",
+                spec_title, path_count, has_postman)
 
     if path_count == 0:
-        logger.error("Spec has no paths — check that the uploaded file is a valid OAS spec")
         yield {"type": "error", "message": "The uploaded spec has no paths. Please upload a valid OpenAPI spec (JSON or YAML) with a 'paths' key."}
         return
 
     original_validation = _validate_spec(original_spec, "original spec")
 
-    state: dict = {
-        "current_spec":       oas_spec,
-        "postman_text":       postman_text,
-        "has_postman":        has_postman,
-        "review_suggestions": [],
-        "last_changes":       [],
-        "validation_errors":  original_validation,
-    }
+    yield {"type": "enhance_start"}
 
-    all_iterations:        list[dict] = []
-    prev_suggestion_count: int        = -1
-    stalled_iterations:    int        = 0
-    loop_start             = time.monotonic()
-
-    max_iterations = max(1, min(max_iterations, 20))
-    for i in range(max_iterations):
-        iteration = i + 1
-
-        if stalled_iterations >= 3:
-            logger.info("Stopping — no improvement for 3 consecutive iterations")
-            break
-
-        yield {"type": "iteration_start", "iteration": iteration}
-
-        # ── Reviewer ──────────────────────────────────────────────────────────
-        async for _hb in _await_with_heartbeat(_run_reviewer(state, iteration), f"iter-{iteration} reviewer"):
-            if _hb.get("type") == "heartbeat":
-                yield _hb
-            else:
-                review = _hb
-
-        state["review_suggestions"] = review["suggestions"]
-
-        yield {"type": "review_complete", "iteration": iteration, "data": review}
-
-        if review["satisfied"]:
-            logger.info("Iter %d | reviewer satisfied, stopping", iteration)
-            break
-        if not review["suggestions"]:
-            logger.info("Iter %d | reviewer returned no suggestions, stopping", iteration)
-            break
-
-        # ── Enhancer ──────────────────────────────────────────────────────────
-        yield {"type": "enhance_start", "iteration": iteration}
-
-        async for _hb in _await_with_heartbeat(_run_enhancer(state, iteration), f"iter-{iteration} enhancer"):
-            if _hb.get("type") == "heartbeat":
-                yield _hb
-            else:
-                result = _hb
-
-        if result.get("truncated"):
-            logger.warning("Iter %d | enhancer failed — stopping loop", iteration)
-            yield {"type": "error", "message": "Enhancer output was truncated or failed. Your spec may be too large — consider splitting it by tag."}
-            break
-
-        enhanced        = result["enhanced_spec"]
-        orig_path_count = len(state["current_spec"].get("paths", {}))
-        new_path_count  = len(enhanced.get("paths", {}))
-
-        # If the model returned fewer paths than the original, merge into the full spec
-        # so no paths are lost. The reviewer will catch remaining paths in the next iteration.
-        if new_path_count < orig_path_count:
-            logger.info("Iter %d | enhancer returned %d/%d paths — merging with original",
-                        iteration, new_path_count, orig_path_count)
-            merged = json.loads(json.dumps(state["current_spec"]))
-            for path, content in enhanced.get("paths", {}).items():
-                merged["paths"][path] = content
-            if "components" in enhanced:
-                merged.setdefault("components", {})
-                for section, items in enhanced["components"].items():
-                    merged["components"].setdefault(section, {})
-                    merged["components"][section].update(items)
-            enhanced = merged
-
-        new_errors = _validate_spec(enhanced, f"iter-{iteration}")
-
-        state["current_spec"]      = enhanced
-        state["last_changes"]      = result["changes_made"]
-        state["validation_errors"] = new_errors
-
-        all_iterations.append({
-            "iteration":      iteration,
-            "review_summary": review["summary"],
-            "suggestions":    review["suggestions"],
-            "changes_made":   result["changes_made"],
-        })
-        yield {"type": "enhance_complete", "iteration": iteration,
-               "data": {"changes_made": result["changes_made"]}}
-
-        # Stop if suggestions are not decreasing across iterations
-        suggestion_count = len(review["suggestions"])
-        if prev_suggestion_count > 0 and suggestion_count >= prev_suggestion_count:
-            stalled_iterations += 1
-            logger.warning("Stall detected — suggestions %d → %d (stall count %d/3)",
-                           prev_suggestion_count, suggestion_count, stalled_iterations)
+    result = None
+    async for _hb in _await_with_heartbeat(
+        _run_enhancer(oas_spec, postman_text, has_postman, original_validation),
+        "enhancer"
+    ):
+        if _hb.get("type") == "heartbeat":
+            yield _hb
         else:
-            stalled_iterations = 0
-        prev_suggestion_count = suggestion_count
+            result = _hb
 
-    total_elapsed    = time.monotonic() - loop_start
-    final_validation = state["validation_errors"]
-    total_changes    = sum(len(it["changes_made"]) for it in all_iterations)
+    if result.get("truncated"):
+        yield {"type": "error", "message": "Enhancer output was truncated or failed. Your spec may be too large — consider splitting it by tag."}
+        return
 
-    logger.info("Loop done — %d iteration(s), %d change(s), %.1fs, validation errors: %d → %d",
-                len(all_iterations), total_changes, total_elapsed,
-                len(original_validation), len(final_validation))
+    # Merge changed paths/components back into the original spec
+    final_spec = json.loads(json.dumps(original_spec))
+
+    changed_paths = result["changed_paths"]
+    if changed_paths:
+        for path, content in changed_paths.items():
+            final_spec["paths"][path] = content
+        logger.info("Merged %d changed path(s) into spec", len(changed_paths))
+
+    changed_components = result.get("changed_components") or {}
+    if changed_components:
+        final_spec.setdefault("components", {})
+        for section, items in changed_components.items():
+            final_spec["components"].setdefault(section, {})
+            final_spec["components"][section].update(items)
+        logger.info("Merged changed components: %s", list(changed_components.keys()))
+
+    final_validation = _validate_spec(final_spec, "final spec")
+
+    logger.info("Enhancement done — %d change(s), validation errors: %d → %d",
+                len(result["changes_made"]), len(original_validation), len(final_validation))
 
     yield {
         "type":                       "done",
         "original_spec":              original_spec,
         "original_spec_yaml":         _to_yaml(original_spec),
-        "final_spec":                 state["current_spec"],
-        "final_spec_yaml":            _to_yaml(state["current_spec"]),
-        "iterations":                 all_iterations,
+        "final_spec":                 final_spec,
+        "final_spec_yaml":            _to_yaml(final_spec),
+        "changes_made":               result["changes_made"],
         "original_validation_errors": original_validation,
         "validation_errors":          final_validation,
-        "summary": {
-            "total_iterations":      len(all_iterations),
-            "total_changes":         total_changes,
-            "completed_by_reviewer": review.get("satisfied", False),
-        },
     }
