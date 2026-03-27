@@ -1,53 +1,64 @@
 """
-OpenAI function tool schemas and state helper functions.
+OpenAI function tool schemas.
 """
 
-ENHANCER_TOOLS = [
+SUGGESTER_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "save_enhanced_spec",
-            "description": "Save the changes made to the OAS specification.",
+            "name": "submit_suggestions",
+            "description": "Submit a list of suggested improvements for the OAS specification.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "changes_made": {
+                    "suggestions": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Human-readable list of every change applied.",
-                    },
-                    "changed_paths": {
-                        "type": "object",
-                        "description": (
-                            "A JSON object where each key is a path string (e.g. '/users/{id}') "
-                            "and each value is the COMPLETE enhanced path item object including all "
-                            "operations, parameters, requestBody, and responses fully written out. "
-                            "Only include paths you actually modified. Do NOT just list path names."
-                        ),
-                    },
-                    "changed_components": {
-                        "type": "object",
-                        "description": (
-                            "A JSON object where each key is a component section name (e.g. 'schemas') "
-                            "and each value is a JSON object of the modified entries fully written out. "
-                            "Only include sections you actually modified. Do NOT just list section names."
-                        ),
+                        "description": "List of suggested field additions. Each item targets one specific field.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "The API path, e.g. /users/{id}",
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "description": "HTTP method lowercase, e.g. get, post. Use 'component' for component schema suggestions.",
+                                },
+                                "location": {
+                                    "type": "string",
+                                    "description": (
+                                        "Dot-notation location of the field within the operation or component. Examples: "
+                                        "'description' for the operation description, "
+                                        "'parameters.0.description' for first parameter, "
+                                        "'parameters.0.schema.example' for first parameter example, "
+                                        "'requestBody.description' for request body description, "
+                                        "'requestBody.content.application/json.schema.example' for request body example, "
+                                        "'responses.200.description' for response description, "
+                                        "'responses.200.content.application/json.schema.example' for response example, "
+                                        "'x-ai' for the x-ai extension field. "
+                                        "For components: 'schemas.MySchema.description' or 'schemas.MySchema.properties.fieldName.description'."
+                                    ),
+                                },
+                                "field": {
+                                    "type": "string",
+                                    "enum": ["description", "example", "x-ai"],
+                                    "description": "The type of field being suggested.",
+                                },
+                                "value": {
+                                    "description": "The suggested value. String for description, any valid JSON value for example, true for x-ai.",
+                                },
+                                "reason": {
+                                    "type": "string",
+                                    "description": "One short sentence explaining why this addition is useful.",
+                                },
+                            },
+                            "required": ["path", "method", "location", "field", "value"],
+                        },
                     },
                 },
-                "required": ["changes_made", "changed_paths"],
+                "required": ["suggestions"],
             },
         },
     }
 ]
-
-
-def get_breaking_changes_policy(has_postman: bool) -> str:
-    if has_postman:
-        return (
-            "A Postman collection IS available. Breaking changes ARE allowed — "
-            "align the spec with the Postman collection if responses or schemas differ."
-        )
-    return (
-        "NO Postman collection is available. Breaking changes are NOT allowed. "
-        "Only additive improvements: add examples, descriptions, new error responses, etc."
-    )

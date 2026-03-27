@@ -1,11 +1,10 @@
 """
-Flask frontend — common homepage + OAS Enhancer util.
-Proxies /enhance (SSE) to the FastAPI backend.
+Flask frontend — OAS Enhancer suggestion-based review.
 """
 import os
 import requests
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, Response, stream_with_context
+from flask import Flask, render_template, request, Response, stream_with_context, jsonify
 
 load_dotenv()
 
@@ -25,8 +24,8 @@ def oas_enhancer():
     return render_template("index.html")
 
 
-@app.route("/enhance", methods=["POST"])
-def enhance():
+@app.route("/suggest", methods=["POST"])
+def suggest():
     files = {}
     if "oas_file" in request.files:
         f = request.files["oas_file"]
@@ -38,7 +37,7 @@ def enhance():
 
     def generate():
         with requests.post(
-            f"{BACKEND_URL}/enhance",
+            f"{BACKEND_URL}/suggest",
             files=files,
             stream=True,
             timeout=600,
@@ -52,6 +51,13 @@ def enhance():
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/apply", methods=["POST"])
+def apply():
+    data = request.get_json()
+    resp = requests.post(f"{BACKEND_URL}/apply", json=data, timeout=60)
+    return jsonify(resp.json()), resp.status_code
 
 
 if __name__ == "__main__":

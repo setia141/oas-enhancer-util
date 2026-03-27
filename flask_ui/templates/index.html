@@ -8,18 +8,15 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; display: flex; flex-direction: column; }
 
-    /* ── Header ── */
     #app-header { background:#fff; border-bottom:1px solid #e8eaed; padding:0 24px; display:flex; align-items:center; height:56px; flex-shrink:0; }
     #app-header .logo { font-size:20px; margin-right:10px; }
     #app-header .title { font-weight:700; font-size:16px; }
 
-    /* ── Main ── */
-    #app-main { flex:1; display:flex; align-items:center; justify-content:center; padding:32px 16px; }
+    #app-main { flex:1; display:flex; align-items:flex-start; justify-content:center; padding:32px 16px; }
 
-    /* ── Upload Form ── */
+    /* Upload */
     .upload-card { width:100%; max-width:560px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
     .card-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:28px 24px; color:#fff; }
-    .card-header .icon { font-size:32px; margin-bottom:8px; }
     .card-header h1 { font-size:20px; font-weight:700; }
     .card-header p { font-size:13px; opacity:.9; margin-top:4px; }
     .card-body { padding:24px; }
@@ -27,9 +24,8 @@
     .field label { display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:8px; }
     .field label .opt { font-weight:400; color:#888; }
     .field label .req { color:#e53935; }
-    .field .hint { font-size:11px; color:#999; margin-top:4px; }
     .dropzone { border:2px dashed #d0d5dd; border-radius:12px; padding:24px 16px; text-align:center; cursor:pointer; background:#fafafa; transition:all .2s; }
-    .dropzone:hover, .dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
+    .dropzone:hover,.dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
     .dropzone.has-file { border-color:#34a853; background:#e6f4ea; }
     .dropzone .dz-icon { font-size:28px; margin-bottom:8px; }
     .dropzone .dz-label { font-weight:600; font-size:14px; color:#333; margin-bottom:4px; }
@@ -37,28 +33,73 @@
     .dropzone .dz-file { font-size:13px; color:#34a853; font-weight:500; }
     .remove-btn { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
     .file-warn { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
-    .file-warn.warn  { background:#fff8e1; color:#b45309; border:1px solid #fcd34d; }
     .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
     .submit-btn { width:100%; padding:13px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
     .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
 
-    /* ── Progress ── */
+    /* Progress */
     .progress-card { width:100%; max-width:480px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; }
     .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
-    .progress-header h2 { font-weight:700; font-size:18px; margin-bottom:4px; }
-    .progress-header p { font-size:13px; opacity:.9; }
+    .progress-header h2 { font-weight:700; font-size:18px; }
+    .progress-header p { font-size:13px; opacity:.9; margin-top:4px; }
     .progress-body { padding:32px 24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
     .spinner { width:48px; height:48px; border:4px solid #e8eaed; border-top-color:#4285f4; border-radius:50%; animation:spin .8s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg) } }
-    .progress-status { font-size:14px; color:#555; text-align:center; }
-    .progress-timer { font-size:13px; color:#999; }
+    .progress-status { font-size:14px; color:#555; }
+    .progress-timer  { font-size:13px; color:#999; }
 
-    /* ── Result Viewer ── */
+    /* Review panel */
+    .review-page { width:100%; max-width:900px; }
+    .review-toolbar { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); padding:14px 20px; display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+    .review-toolbar h2 { font-size:16px; font-weight:700; flex:1; }
+    .tbar-stat { font-size:13px; color:#666; }
+    .tbar-btn { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
+    .tbar-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
+    .tbar-btn.success { background:#34a853; color:#fff; border-color:#34a853; }
+    .tbar-btn.danger  { background:#ea4335; color:#fff; border-color:#ea4335; }
+
+    /* Endpoint group */
+    .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); margin-bottom:12px; overflow:hidden; }
+    .endpoint-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #e8eaed; background:#f8f9fa; }
+    .method-badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; }
+    .endpoint-path { font-size:14px; font-family:monospace; font-weight:600; flex:1; }
+    .group-stats { font-size:12px; color:#888; }
+    .group-actions { display:flex; gap:6px; }
+    .group-btn { padding:4px 10px; font-size:12px; border-radius:6px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; font-family:inherit; }
+    .group-btn.accept-all { color:#34a853; border-color:#34a853; }
+    .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
+
+    /* Suggestion row */
+    .suggestion-row { display:flex; align-items:flex-start; gap:12px; padding:12px 16px; border-bottom:1px solid #f0f0f0; transition:background .15s; }
+    .suggestion-row:last-child { border-bottom:none; }
+    .suggestion-row.accepted { background:#f0faf3; }
+    .suggestion-row.rejected { background:#fdf0ef; opacity:.6; }
+    .suggestion-row.edited   { background:#fffbf0; }
+    .sugg-left { flex:1; min-width:0; }
+    .sugg-location { font-size:11px; font-family:monospace; color:#4285f4; margin-bottom:4px; }
+    .sugg-field-badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:6px; text-transform:uppercase; }
+    .sugg-field-badge.description { background:#e8f0fe; color:#1a73e8; }
+    .sugg-field-badge.example     { background:#e6f4ea; color:#34a853; }
+    .sugg-field-badge.x-ai        { background:#f3e8fd; color:#9334e6; }
+    .sugg-value { font-size:13px; color:#333; margin-top:2px; word-break:break-word; }
+    .sugg-value.mono { font-family:monospace; background:#f8f9fa; padding:2px 6px; border-radius:4px; font-size:12px; }
+    .sugg-reason { font-size:11px; color:#999; margin-top:4px; }
+    .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #4285f4; border-radius:6px; resize:vertical; min-height:48px; }
+    .sugg-actions { display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
+    .sugg-btn { padding:5px 12px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; }
+    .sugg-btn.accept { color:#34a853; border-color:#34a853; background:#fff; }
+    .sugg-btn.accept.active { background:#34a853; color:#fff; }
+    .sugg-btn.edit   { color:#f4a234; border-color:#f4a234; background:#fff; }
+    .sugg-btn.edit.active { background:#f4a234; color:#fff; }
+    .sugg-btn.reject { color:#ea4335; border-color:#ea4335; background:#fff; }
+    .sugg-btn.reject.active { background:#ea4335; color:#fff; }
+
+    /* Result */
     .result-card { width:100%; max-width:1100px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.12); overflow:hidden; display:flex; flex-direction:column; height:88vh; }
     .result-header { padding:14px 20px; background:linear-gradient(135deg,#34a853,#4285f4); color:#fff; display:flex; align-items:center; gap:12px; flex-shrink:0; }
     .result-header .rh-info { flex:1; }
     .result-header h2 { font-weight:700; font-size:16px; }
-    .result-header p { font-size:12px; opacity:.9; margin-top:2px; }
+    .result-header p  { font-size:12px; opacity:.9; margin-top:2px; }
     .new-btn { padding:7px 14px; font-size:13px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4); border-radius:8px; color:#fff; cursor:pointer; font-family:inherit; }
     .tab-bar { display:flex; align-items:center; border-bottom:1px solid #e8eaed; padding:0 16px; flex-shrink:0; }
     .tab-btn { padding:10px 14px; font-size:13px; font-weight:400; color:#666; border:none; border-bottom:2px solid transparent; background:none; cursor:pointer; font-family:inherit; }
@@ -67,60 +108,34 @@
     .action-btn { padding:6px 12px; font-size:12px; background:#fff; border:1px solid #e0e0e0; border-radius:6px; cursor:pointer; font-family:inherit; color:#444; }
     .action-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; }
     .tab-content { flex:1; overflow:hidden; display:flex; flex-direction:column; }
-
-    /* YAML tab */
     #tab-yaml { margin:0; padding:16px 20px; font-size:12px; line-height:1.6; background:#1e1e2e; color:#cdd6f4; flex:1; overflow:auto; font-family:monospace; white-space:pre; }
-
-    /* Diff tab */
     #tab-diff { display:flex; flex-direction:column; height:100%; }
     .diff-toolbar { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid #e8eaed; background:#fafafa; flex-shrink:0; }
     .diff-badge { font-size:12px; padding:2px 10px; border-radius:10px; font-weight:600; }
-    .diff-badge.added { background:#e6f4ea; color:#34a853; }
+    .diff-badge.added   { background:#e6f4ea; color:#34a853; }
     .diff-badge.removed { background:#fce8e6; color:#ea4335; }
     .diff-panels { display:flex; flex:1; overflow:hidden; }
     .diff-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
-    .diff-panel-header { padding:10px 14px; background:#f8f9fa; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; flex-shrink:0; }
+    .diff-panel-header { padding:10px 14px; background:#f8f9fa; border-bottom:1px solid #e8eaed; font-weight:600; font-size:13px; flex-shrink:0; }
     .diff-panel-body { overflow-y:auto; font-family:monospace; font-size:12px; line-height:20px; flex:1; }
     .diff-line { display:flex; }
-    .diff-line.added   { background:#e6f4ea; border-left:3px solid #34a853; }
-    .diff-line.removed { background:#fce8e6; border-left:3px solid #ea4335; }
+    .diff-line.added     { background:#e6f4ea; border-left:3px solid #34a853; }
+    .diff-line.removed   { background:#fce8e6; border-left:3px solid #ea4335; }
     .diff-line.unchanged { border-left:3px solid transparent; }
-    .diff-num { min-width:40px; text-align:right; padding-right:8px; user-select:none; flex-shrink:0; padding-top:1px; padding-bottom:1px; }
-    .diff-line.added .diff-num { color:#a8d5b5; }
-    .diff-line.removed .diff-num { color:#f5bfba; }
+    .diff-num  { min-width:40px; text-align:right; padding-right:8px; user-select:none; flex-shrink:0; padding-top:1px; }
+    .diff-line.added .diff-num     { color:#a8d5b5; }
+    .diff-line.removed .diff-num   { color:#f5bfba; }
     .diff-line.unchanged .diff-num { color:#ccc; }
     .diff-text { white-space:pre; overflow:hidden; text-overflow:ellipsis; padding:1px 8px 1px 0; }
-    .diff-line.added .diff-text { color:#1e6e35; }
-    .diff-line.removed .diff-text { color:#c5221f; }
-    .diff-line.unchanged .diff-text { color:#333; }
+    .diff-line.added .diff-text    { color:#1e6e35; }
+    .diff-line.removed .diff-text  { color:#c5221f; }
+    .diff-line.unchanged .diff-text{ color:#333; }
     .diff-divider { width:1px; background:#e8eaed; flex-shrink:0; }
-
-    /* Summary tab */
-    #tab-summary { padding:16px 20px; overflow-y:auto; }
-    .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
-    .stat-box { background:#f8f9fa; border:1px solid #e8eaed; border-radius:8px; padding:12px 14px; text-align:center; }
-    .stat-value { font-size:22px; font-weight:700; }
-    .stat-label { font-size:11px; color:#888; margin-top:2px; }
-    .changes-list { border:1px solid #e8eaed; border-radius:10px; overflow:hidden; }
-    .changes-list-header { padding:12px 16px; background:#f8f9fa; font-size:13px; font-weight:600; color:#1a1a1a; border-bottom:1px solid #e8eaed; }
-    .changes-list ul { margin:0; padding:12px 16px 12px 32px; }
-    .changes-list li { font-size:13px; color:#2d6a3f; margin-bottom:6px; line-height:1.5; }
-    .changes-list-empty { padding:16px; font-size:13px; color:#888; }
-
-    /* Endpoints tab */
-    #tab-endpoints { padding:16px 20px; overflow-y:auto; }
-    .endpoint-row { display:flex; align-items:center; gap:10px; padding:9px 14px; border-radius:8px; margin-bottom:6px; background:#f8f9fa; border:1px solid #e8eaed; }
-    .method-badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; }
-    .endpoint-path { font-size:13px; font-family:monospace; flex:1; }
-    .endpoint-summary { font-size:12px; color:#888; }
-    .example-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
-    .example-badge.has { background:#e6f4ea; color:#34a853; }
-    .example-badge.none { background:#fce8e6; color:#c5221f; }
 
     /* Error */
     .error-box { width:100%; max-width:560px; }
-    .error-msg { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
-    .retry-btn { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
+    .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
+    .retry-btn  { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
   </style>
 </head>
 <body>
@@ -132,12 +147,11 @@
 
 <main id="app-main">
 
-  <!-- ── IDLE: Upload Form ── -->
+  <!-- IDLE -->
   <div id="phase-idle" class="upload-card">
     <div class="card-header">
-      <div class="icon">📄</div>
       <h1>OAS Enhancer</h1>
-      <p>Upload your OpenAPI spec and optional Postman collection to auto-generate descriptions and examples</p>
+      <p>Upload your spec — review AI suggestions before anything is applied</p>
     </div>
     <div class="card-body">
       <div class="field">
@@ -148,10 +162,8 @@
           <div class="dz-hint">Drag &amp; drop or click to browse</div>
         </div>
         <input type="file" id="inp-oas" accept=".json,.yaml,.yml" style="display:none" onchange="dzFile(event,'dz-oas','oas')">
-        <div class="hint">Accepts JSON, YAML (.yaml/.yml)</div>
         <div class="file-warn" id="oas-size-warn"></div>
       </div>
-
       <div class="field">
         <label>Postman Collection <span class="opt">(optional)</span></label>
         <div id="dz-postman" class="dropzone" ondragover="dzDragOver(event,'dz-postman')" ondragleave="dzDragLeave('dz-postman')" ondrop="dzDrop(event,'dz-postman','postman')" onclick="document.getElementById('inp-postman').click()">
@@ -162,29 +174,41 @@
         <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
       </div>
-
-      <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Enhance OAS</button>
+      <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Get Suggestions</button>
     </div>
   </div>
 
-  <!-- ── RUNNING: Progress ── -->
+  <!-- LOADING -->
   <div id="phase-running" class="progress-card" style="display:none">
     <div class="progress-header">
-      <h2>✨ Enhancing your OAS spec</h2>
-      <p>Single-pass AI enhancement in progress</p>
+      <h2>Analyzing your spec...</h2>
+      <p>AI is reviewing fields and generating suggestions</p>
     </div>
     <div class="progress-body">
       <div class="spinner"></div>
-      <div class="progress-status" id="progress-status">Analyzing and enhancing spec...</div>
+      <div class="progress-status" id="progress-status">Reviewing spec...</div>
       <div class="progress-timer" id="progress-timer">0s</div>
     </div>
   </div>
 
-  <!-- ── DONE: Result Viewer ── -->
+  <!-- REVIEW -->
+  <div id="phase-review" class="review-page" style="display:none">
+    <div class="review-toolbar">
+      <h2>Review Suggestions</h2>
+      <span class="tbar-stat" id="tbar-stat"></span>
+      <button class="tbar-btn" onclick="acceptAll()">✓ Accept All</button>
+      <button class="tbar-btn" onclick="rejectAll()">✕ Reject All</button>
+      <button class="tbar-btn primary" id="apply-btn" onclick="applyAccepted()">Apply Accepted →</button>
+      <button class="tbar-btn" onclick="resetAll()">← New File</button>
+    </div>
+    <div id="review-body"></div>
+  </div>
+
+  <!-- DONE -->
   <div id="phase-done" class="result-card" style="display:none">
     <div class="result-header">
       <div class="rh-info">
-        <h2>✅ Enhancement Complete</h2>
+        <h2>✅ Done</h2>
         <p id="result-meta"></p>
       </div>
       <button class="new-btn" onclick="resetAll()">← New File</button>
@@ -192,8 +216,6 @@
     <div class="tab-bar">
       <button class="tab-btn" data-tab="diff" onclick="switchTab('diff')">Diff View</button>
       <button class="tab-btn" data-tab="yaml" onclick="switchTab('yaml')">Enhanced YAML</button>
-      <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">Changes</button>
-      <button class="tab-btn" data-tab="endpoints" onclick="switchTab('endpoints')">Endpoint Summary</button>
       <div class="tab-actions">
         <button class="action-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
         <button class="action-btn primary" onclick="downloadYaml()">⬇ Download YAML</button>
@@ -202,12 +224,10 @@
     <div class="tab-content">
       <pre id="tab-yaml" style="display:none"></pre>
       <div id="tab-diff" style="display:none"></div>
-      <div id="tab-summary" style="display:none"></div>
-      <div id="tab-endpoints" style="display:none"></div>
     </div>
   </div>
 
-  <!-- ── ERROR ── -->
+  <!-- ERROR -->
   <div id="phase-error" class="error-box" style="display:none">
     <div class="error-msg" id="error-msg"></div>
     <button class="retry-btn" onclick="resetAll()">Try Again</button>
@@ -218,113 +238,82 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────
 let state = {
-  oasFile: null,
-  postmanFile: null,
-  result: null,
-  startedAt: null,
+  oasFile:      null,
+  postmanFile:  null,
+  spec:         null,       // original spec dict from server
+  originalYaml: null,       // for diff
+  suggestions:  [],         // [{...sugg, status:'pending'|'accepted'|'rejected'|'edited', editedValue}]
 }
 
-const CHANGES_PREVIEW = 5
-
-// ── Phase switching ────────────────────────────────────────────────
+// ── Phase ──────────────────────────────────────────────────────────
 function showPhase(name) {
-  ['idle','running','done','error'].forEach(p => {
+  ['idle','running','review','done','error'].forEach(p =>
     document.getElementById('phase-' + p).style.display = p === name ? '' : 'none'
-  })
+  )
 }
 
 let _timerInterval = null
-
 function _startTimer() {
   clearInterval(_timerInterval)
   _timerInterval = setInterval(() => {
     const el = document.getElementById('progress-timer')
-    if (!el) { clearInterval(_timerInterval); return }
-    const secs = Math.floor((Date.now() - state.startedAt) / 1000)
-    el.textContent = secs + 's'
+    if (!el) return
+    el.textContent = Math.floor((Date.now() - state.startedAt) / 1000) + 's'
   }, 1000)
 }
 
 function resetAll() {
   clearInterval(_timerInterval)
-  _showOnlyChanges = false
-  _diffData = null
-  state = { oasFile:null, postmanFile:null, result:null, startedAt:null }
+  state = { oasFile:null, postmanFile:null, spec:null, originalYaml:null, suggestions:[] }
   document.getElementById('inp-oas').value = ''
   document.getElementById('inp-postman').value = ''
   dzReset('dz-oas', '📋', 'OAS / Swagger file')
   dzReset('dz-postman', '📮', 'Postman Collection v2.1')
   document.getElementById('remove-postman').style.display = 'none'
   document.getElementById('submit-btn').disabled = true
+  document.getElementById('review-body').innerHTML = ''
   showPhase('idle')
 }
 
-// ── Drop zone ──────────────────────────────────────────────────────
-function dzDragOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag') }
-function dzDragLeave(id)   { document.getElementById(id).classList.remove('drag') }
-
-function dzDrop(e, id, key) {
-  e.preventDefault()
-  dzDragLeave(id)
-  const f = e.dataTransfer.files[0]
-  if (f) setFile(id, key, f)
-}
-
-function dzFile(e, id, key) {
-  const f = e.target.files[0]
-  if (f) setFile(id, key, f)
-}
-
-const OAS_MIN_BYTES  = 200
-const OAS_WARN_BYTES = 80 * 1024  // 80 KB
-
-function _checkOasSize(file) {
-  const warn = document.getElementById('oas-size-warn')
-  if (file.size < OAS_MIN_BYTES) {
-    warn.className = 'file-warn error'
-    warn.textContent = '⚠ File is too small to be a valid OAS spec — please check the file.'
-    warn.style.display = ''
-    document.getElementById('submit-btn').disabled = true
-  } else if (file.size > OAS_WARN_BYTES) {
-    warn.className = 'file-warn warn'
-    warn.textContent = `⚠ Large spec (${(file.size/1024).toFixed(0)} KB) — the enhancer will process as many paths as possible in one pass.`
-    warn.style.display = ''
-  } else {
-    warn.style.display = 'none'
-  }
-}
+// ── Dropzone ───────────────────────────────────────────────────────
+function dzDragOver(e,id){ e.preventDefault(); document.getElementById(id).classList.add('drag') }
+function dzDragLeave(id) { document.getElementById(id).classList.remove('drag') }
+function dzDrop(e,id,key){ e.preventDefault(); dzDragLeave(id); const f=e.dataTransfer.files[0]; if(f) setFile(id,key,f) }
+function dzFile(e,id,key){ const f=e.target.files[0]; if(f) setFile(id,key,f) }
 
 function setFile(id, key, file) {
   if (key === 'oas') {
     state.oasFile = file
-    _checkOasSize(file)
-    if (file.size >= OAS_MIN_BYTES) document.getElementById('submit-btn').disabled = false
+    if (file.size < 200) {
+      const w = document.getElementById('oas-size-warn')
+      w.className = 'file-warn error'
+      w.textContent = '⚠ File too small to be a valid OAS spec.'
+      w.style.display = ''
+      return
+    }
+    document.getElementById('oas-size-warn').style.display = 'none'
+    document.getElementById('submit-btn').disabled = false
   } else {
     state.postmanFile = file
     document.getElementById('remove-postman').style.display = ''
   }
   const dz = document.getElementById(id)
-  dz.classList.remove('drag')
-  dz.classList.add('has-file')
-  dz.querySelector('.dz-icon').textContent = '✅'
+  dz.classList.remove('drag'); dz.classList.add('has-file')
+  dz.querySelector('.dz-icon').textContent  = '✅'
   dz.querySelector('.dz-label').textContent = file.name
-  const hint = dz.querySelector('.dz-hint')
-  if (hint) hint.style.display = 'none'
-  let fileInfo = dz.querySelector('.dz-file')
-  if (!fileInfo) { fileInfo = document.createElement('div'); fileInfo.className = 'dz-file'; dz.appendChild(fileInfo) }
-  fileInfo.textContent = `${file.name} (${(file.size/1024).toFixed(1)} KB)`
+  const hint = dz.querySelector('.dz-hint'); if (hint) hint.style.display = 'none'
+  let fi = dz.querySelector('.dz-file')
+  if (!fi) { fi = document.createElement('div'); fi.className = 'dz-file'; dz.appendChild(fi) }
+  fi.textContent = `${file.name} (${(file.size/1024).toFixed(1)} KB)`
 }
 
 function dzReset(id, icon, label) {
   const dz = document.getElementById(id)
   dz.classList.remove('has-file','drag')
-  dz.querySelector('.dz-icon').textContent = icon
+  dz.querySelector('.dz-icon').textContent  = icon
   dz.querySelector('.dz-label').textContent = label
-  const hint = dz.querySelector('.dz-hint')
-  if (hint) hint.style.display = ''
-  const fileInfo = dz.querySelector('.dz-file')
-  if (fileInfo) fileInfo.remove()
-  if (id === 'dz-oas') document.getElementById('oas-size-warn').style.display = 'none'
+  const hint = dz.querySelector('.dz-hint'); if (hint) hint.style.display = ''
+  const fi = dz.querySelector('.dz-file'); if (fi) fi.remove()
 }
 
 function removePostman() {
@@ -337,11 +326,9 @@ function removePostman() {
 // ── Submit ─────────────────────────────────────────────────────────
 async function handleSubmit() {
   if (!state.oasFile) return
-
-  state.result    = null
   state.startedAt = Date.now()
-  document.getElementById('progress-status').textContent = 'Analyzing and enhancing spec...'
-  document.getElementById('progress-timer').textContent = '0s'
+  document.getElementById('progress-status').textContent = 'Reviewing spec...'
+  document.getElementById('progress-timer').textContent  = '0s'
   showPhase('running')
   _startTimer()
 
@@ -350,7 +337,7 @@ async function handleSubmit() {
   if (state.postmanFile) form.append('postman_file', state.postmanFile)
 
   try {
-    const resp = await fetch('/enhance', { method:'POST', body:form })
+    const resp = await fetch('/suggest', { method:'POST', body:form })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || `Server error ${resp.status}`)
@@ -358,7 +345,6 @@ async function handleSubmit() {
     const reader  = resp.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -367,21 +353,21 @@ async function handleSubmit() {
       buffer = lines.pop() ?? ''
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue
-        let event
-        try { event = JSON.parse(line.slice(6)) } catch { continue }
+        let event; try { event = JSON.parse(line.slice(6)) } catch { continue }
         handleEvent(event)
       }
     }
   } catch(e) {
+    clearInterval(_timerInterval)
     document.getElementById('error-msg').textContent = '⚠ ' + e.message
     showPhase('error')
   }
 }
 
-// ── SSE Event handler ──────────────────────────────────────────────
+// ── SSE events ─────────────────────────────────────────────────────
 function handleEvent(event) {
   if (event.type === 'heartbeat') {
-    document.getElementById('progress-status').textContent = 'Still enhancing — this may take a minute...'
+    document.getElementById('progress-status').textContent = 'Still reviewing — almost there...'
     return
   }
   if (event.type === 'error') {
@@ -390,71 +376,226 @@ function handleEvent(event) {
     showPhase('error')
     return
   }
-  if (event.type === 'enhance_start') {
-    document.getElementById('progress-status').textContent = 'Enhancing spec...'
-  }
   if (event.type === 'done') {
     clearInterval(_timerInterval)
-    state.result = event
-    renderResult()
+    state.spec          = event.spec
+    state.originalYaml  = event.original_yaml
+    state.suggestions   = event.suggestions.map(s => ({ ...s, status: 'pending' }))
+    renderReview()
+    showPhase('review')
+  }
+}
+
+// ── Review rendering ───────────────────────────────────────────────
+const METHOD_COLORS = { get:'#34a853', post:'#4285f4', put:'#fbbc04', patch:'#ff6d00', delete:'#e53935', component:'#9334e6' }
+
+function renderReview() {
+  updateToolbar()
+  const body = document.getElementById('review-body')
+  body.innerHTML = ''
+
+  // Group by path+method
+  const groups = {}
+  state.suggestions.forEach((s, idx) => {
+    const key = s.method === 'component' ? `component::${s.path}` : `${s.method}::${s.path}`
+    if (!groups[key]) groups[key] = { path: s.path, method: s.method, items: [] }
+    groups[key].items.push({ ...s, idx })
+  })
+
+  for (const [, group] of Object.entries(groups)) {
+    const color    = METHOD_COLORS[group.method] || '#888'
+    const label    = group.method === 'component' ? 'COMP' : group.method.toUpperCase()
+    const pending  = group.items.filter(i => state.suggestions[i.idx].status === 'pending').length
+    const accepted = group.items.filter(i => state.suggestions[i.idx].status === 'accepted' || state.suggestions[i.idx].status === 'edited').length
+
+    const groupEl = document.createElement('div')
+    groupEl.className = 'endpoint-group'
+    groupEl.id = `group-${group.method}-${group.path.replace(/\//g,'_').replace(/[{}]/g,'')}`
+
+    groupEl.innerHTML = `
+      <div class="endpoint-header">
+        <span class="method-badge" style="background:${color}">${escHtml(label)}</span>
+        <span class="endpoint-path">${escHtml(group.path)}</span>
+        <span class="group-stats">${accepted} accepted · ${pending} pending</span>
+        <div class="group-actions">
+          <button class="group-btn accept-all" onclick="acceptGroup('${escHtml(group.method)}','${escHtml(group.path)}')">Accept all</button>
+          <button class="group-btn reject-all" onclick="rejectGroup('${escHtml(group.method)}','${escHtml(group.path)}')">Reject all</button>
+        </div>
+      </div>
+      <div class="group-rows" id="rows-${group.method}-${group.path.replace(/\//g,'_').replace(/[{}]/g,'')}"></div>`
+
+    body.appendChild(groupEl)
+
+    const rowsEl = groupEl.querySelector('.group-rows')
+    group.items.forEach(item => {
+      rowsEl.appendChild(buildSuggRow(item.idx))
+    })
+  }
+}
+
+function buildSuggRow(idx) {
+  const s   = state.suggestions[idx]
+  const row = document.createElement('div')
+  row.className = `suggestion-row ${s.status === 'accepted' || s.status === 'edited' ? 'accepted' : s.status === 'rejected' ? 'rejected' : ''}`
+  row.id = `sugg-row-${idx}`
+
+  const valueDisplay = s.field === 'x-ai'
+    ? `<span class="sugg-value mono">true</span>`
+    : `<span class="sugg-value">${escHtml(String(s.value))}</span>`
+
+  const editArea = s.status === 'edited'
+    ? `<textarea class="sugg-edit-area" id="edit-${idx}" onchange="updateEdit(${idx},this.value)">${escHtml(String(s.editedValue ?? s.value))}</textarea>`
+    : `<textarea class="sugg-edit-area" id="edit-${idx}" style="display:none" onchange="updateEdit(${idx},this.value)">${escHtml(String(s.value))}</textarea>`
+
+  row.innerHTML = `
+    <div class="sugg-left">
+      <div class="sugg-location">
+        <span class="sugg-field-badge ${s.field}">${s.field}</span>${escHtml(s.location)}
+      </div>
+      ${valueDisplay}
+      ${editArea}
+      ${s.reason ? `<div class="sugg-reason">${escHtml(s.reason)}</div>` : ''}
+    </div>
+    <div class="sugg-actions">
+      <button class="sugg-btn accept ${s.status==='accepted'||s.status==='edited'?'active':''}" onclick="setSuggStatus(${idx},'accepted')">✓ Accept</button>
+      <button class="sugg-btn edit   ${s.status==='edited'?'active':''}"                        onclick="toggleEdit(${idx})">✎ Edit</button>
+      <button class="sugg-btn reject ${s.status==='rejected'?'active':''}"                      onclick="setSuggStatus(${idx},'rejected')">✕ Reject</button>
+    </div>`
+  return row
+}
+
+function refreshRow(idx) {
+  const existing = document.getElementById(`sugg-row-${idx}`)
+  if (existing) existing.replaceWith(buildSuggRow(idx))
+}
+
+function setSuggStatus(idx, status) {
+  state.suggestions[idx].status = status
+  refreshRow(idx)
+  updateToolbar()
+  updateGroupStats(idx)
+}
+
+function toggleEdit(idx) {
+  const s = state.suggestions[idx]
+  if (s.status === 'edited') {
+    s.status = 'accepted'
+  } else {
+    s.status = 'edited'
+    s.editedValue = s.editedValue ?? s.value
+  }
+  refreshRow(idx)
+  updateToolbar()
+  updateGroupStats(idx)
+}
+
+function updateEdit(idx, val) {
+  state.suggestions[idx].editedValue = val
+}
+
+function acceptAll() {
+  state.suggestions.forEach((s, i) => { if (s.status !== 'rejected') s.status = 'accepted' })
+  renderReview()
+}
+
+function rejectAll() {
+  state.suggestions.forEach(s => s.status = 'rejected')
+  renderReview()
+}
+
+function acceptGroup(method, path) {
+  state.suggestions.forEach((s, i) => {
+    if (s.path === path && s.method === method) s.status = 'accepted'
+  })
+  renderReview()
+}
+
+function rejectGroup(method, path) {
+  state.suggestions.forEach((s, i) => {
+    if (s.path === path && s.method === method) s.status = 'rejected'
+  })
+  renderReview()
+}
+
+function updateGroupStats(idx) {
+  const s      = state.suggestions[idx]
+  const key    = s.method === 'component' ? `component::${s.path}` : `${s.method}::${s.path}`
+  const group  = state.suggestions.filter(sg => (sg.method === 'component' ? `component::${sg.path}` : `${sg.method}::${sg.path}`) === key)
+  const pending  = group.filter(sg => sg.status === 'pending').length
+  const accepted = group.filter(sg => sg.status === 'accepted' || sg.status === 'edited').length
+  const groupEl  = document.getElementById(`group-${s.method}-${s.path.replace(/\//g,'_').replace(/[{}]/g,'')}`)
+  if (groupEl) {
+    const statsEl = groupEl.querySelector('.group-stats')
+    if (statsEl) statsEl.textContent = `${accepted} accepted · ${pending} pending`
+  }
+}
+
+function updateToolbar() {
+  const total    = state.suggestions.length
+  const accepted = state.suggestions.filter(s => s.status === 'accepted' || s.status === 'edited').length
+  const rejected = state.suggestions.filter(s => s.status === 'rejected').length
+  const pending  = total - accepted - rejected
+  document.getElementById('tbar-stat').textContent =
+    `${total} suggestions · ${accepted} accepted · ${rejected} rejected · ${pending} pending`
+  document.getElementById('apply-btn').textContent =
+    `Apply ${accepted} Accepted →`
+}
+
+// ── Apply ──────────────────────────────────────────────────────────
+async function applyAccepted() {
+  const accepted = state.suggestions
+    .filter(s => s.status === 'accepted' || s.status === 'edited')
+    .map(s => ({
+      path:     s.path,
+      method:   s.method,
+      location: s.location,
+      field:    s.field,
+      value:    s.status === 'edited' ? (s.editedValue ?? s.value) : s.value,
+    }))
+
+  if (!accepted.length) {
+    alert('No accepted suggestions to apply.')
+    return
+  }
+
+  document.getElementById('apply-btn').textContent = 'Applying...'
+  document.getElementById('apply-btn').disabled    = true
+
+  try {
+    const resp = await fetch('/apply', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ spec: state.spec, accepted }),
+    })
+    const data = await resp.json()
+    if (!resp.ok) throw new Error(data.detail || 'Apply failed')
+
+    state.originalYaml = null  // will use server-returned original for diff
+    renderDone(data, accepted.length)
     showPhase('done')
     switchTab('diff')
+  } catch(e) {
+    alert('⚠ ' + e.message)
+    document.getElementById('apply-btn').textContent = `Apply ${accepted.length} Accepted →`
+    document.getElementById('apply-btn').disabled    = false
   }
 }
 
-// ── Result Viewer ──────────────────────────────────────────────────
-function renderResult() {
-  const r          = state.result
-  const pathCount  = Object.keys(r.final_spec?.paths || {}).length
-  const exampleCount = countExamples(r.final_spec)
-  const changes    = (r.changes_made || []).length
-  const origErrors = (r.original_validation_errors || []).length
-  const finalErrors = (r.validation_errors || []).length
+// ── Result ─────────────────────────────────────────────────────────
+let _origYaml = null
+let _finalYaml = null
 
-  let validationNote = ''
-  if (origErrors === 0 && finalErrors > 0) {
-    validationNote = ` · ❌ ${finalErrors} validation error${finalErrors !== 1 ? 's' : ''} introduced`
-  } else if (finalErrors > origErrors) {
-    validationNote = ` · ❌ validation errors: ${origErrors} → ${finalErrors}`
-  } else if (finalErrors < origErrors) {
-    validationNote = ` · ⚠ validation errors: ${origErrors} → ${finalErrors}`
-  } else if (finalErrors > 0) {
-    validationNote = ` · ⚠ ${origErrors} validation error${origErrors !== 1 ? 's' : ''} (unchanged)`
-  }
-
-  const origPathCount = Object.keys(r.original_spec?.paths || {}).length
-  const droppedPaths  = origPathCount - pathCount
-  if (droppedPaths > 0) {
-    validationNote += ` · ❌ ${droppedPaths} path${droppedPaths > 1 ? 's' : ''} dropped`
-  }
-
+function renderDone(data, appliedCount) {
   document.getElementById('result-meta').textContent =
-    `${pathCount} endpoints · ${exampleCount} examples · ${changes} changes${validationNote}`
+    `${appliedCount} changes applied · ${data.failed} failed`
+  document.getElementById('tab-yaml').textContent = data.spec_yaml || ''
+  _origYaml  = state.originalYaml || ''
+  _finalYaml = data.spec_yaml || ''
 
-  document.getElementById('tab-yaml').textContent = r.final_spec_yaml || ''
-  renderDiff(r.original_spec_yaml || '', r.final_spec_yaml || '')
-  renderSummary(r.changes_made || [], origErrors, finalErrors)
-  renderEndpoints(r.final_spec)
-}
-
-function countOpExamples(op) {
-  const req = Object.values(op?.requestBody?.content || {})
-    .reduce((n, m) => n + Object.keys(m?.examples || {}).length, 0)
-  const res = Object.values(op?.responses || {})
-    .flatMap(r => Object.values(r?.content || {}))
-    .reduce((n, m) => n + Object.keys(m?.examples || {}).length, 0)
-  return req + res
-}
-
-function countExamples(spec) {
-  let count = 0
-  for (const pathItem of Object.values(spec?.paths || {})) {
-    for (const [method, op] of Object.entries(pathItem)) {
-      if (!HTTP_METHODS.includes(method)) continue
-      count += countOpExamples(op)
-    }
-  }
-  return count
+  // Reconstruct original YAML from original spec for diff
+  // We stored the spec before applying — need to get original YAML
+  // Use the spec we received in the done event for diff base
+  renderDiff(_origYaml, _finalYaml)
 }
 
 // ── Diff ───────────────────────────────────────────────────────────
@@ -465,21 +606,19 @@ function computeDiff(origStr, enhStr) {
   const origLines = origStr.split('\n')
   const enhLines  = enhStr.split('\n')
   const origCount = {}, enhCount = {}
-  origLines.forEach(l => origCount[l] = (origCount[l] || 0) + 1)
-  enhLines.forEach(l  => enhCount[l]  = (enhCount[l]  || 0) + 1)
-  const origResult = origLines.map(line => ({ content: line, type: (enhCount[line] || 0) > 0 ? 'unchanged' : 'removed' }))
-  const enhResult  = enhLines.map(line  => ({ content: line, type: (origCount[line] || 0) > 0 ? 'unchanged' : 'added'   }))
-  return {
-    origResult, enhResult,
-    addedCount:   enhResult.filter(l => l.type === 'added').length,
-    removedCount: origResult.filter(l => l.type === 'removed').length,
-  }
+  origLines.forEach(l => origCount[l] = (origCount[l]||0)+1)
+  enhLines.forEach(l  => enhCount[l]  = (enhCount[l] ||0)+1)
+  const origResult = origLines.map(l => ({ content:l, type: (enhCount[l]||0)>0 ? 'unchanged':'removed' }))
+  const enhResult  = enhLines.map(l  => ({ content:l, type: (origCount[l]||0)>0 ? 'unchanged':'added'   }))
+  return { origResult, enhResult,
+    addedCount:   enhResult.filter(l=>l.type==='added').length,
+    removedCount: origResult.filter(l=>l.type==='removed').length }
 }
 
 function renderDiff(origStr, enhStr) {
   _diffData = computeDiff(origStr, enhStr)
-  const container = document.getElementById('tab-diff')
-  container.innerHTML = `
+  const c = document.getElementById('tab-diff')
+  c.innerHTML = `
     <div class="diff-toolbar">
       <span class="diff-badge added">+${_diffData.addedCount} added</span>
       <span class="diff-badge removed">-${_diffData.removedCount} removed</span>
@@ -490,38 +629,30 @@ function renderDiff(origStr, enhStr) {
     </div>
     <div class="diff-panels" style="flex:1;overflow:hidden">
       <div class="diff-panel">
-        <div class="diff-panel-header">
-          Original
-          ${_diffData.removedCount ? `<span class="diff-badge removed">-${_diffData.removedCount}</span>` : ''}
-        </div>
+        <div class="diff-panel-header">Original</div>
         <div class="diff-panel-body" id="diff-orig"></div>
       </div>
       <div class="diff-divider"></div>
       <div class="diff-panel">
-        <div class="diff-panel-header">
-          Enhanced
-          ${_diffData.addedCount ? `<span class="diff-badge added">+${_diffData.addedCount}</span>` : ''}
-        </div>
+        <div class="diff-panel-header">Enhanced</div>
         <div class="diff-panel-body" id="diff-enh"></div>
       </div>
     </div>`
-  container.style.display = 'flex'
-  container.style.flexDirection = 'column'
-  container.style.height = '100%'
+  c.style.cssText = 'display:flex;flex-direction:column;height:100%'
   paintDiff()
 }
 
 function paintDiff() {
-  const onlyChanges = _showOnlyChanges
-  const origLines = onlyChanges ? _diffData.origResult.filter(l => l.type !== 'unchanged') : _diffData.origResult
-  const enhLines  = onlyChanges ? _diffData.enhResult.filter(l => l.type !== 'unchanged')  : _diffData.enhResult
-  document.getElementById('diff-orig').innerHTML = origLines.map((l, i) => diffLineHtml(l, i+1)).join('')
-  document.getElementById('diff-enh').innerHTML  = enhLines.map((l, i) => diffLineHtml(l, i+1)).join('')
+  const only = _showOnlyChanges
+  const oL = only ? _diffData.origResult.filter(l=>l.type!=='unchanged') : _diffData.origResult
+  const eL = only ? _diffData.enhResult.filter(l=>l.type!=='unchanged')  : _diffData.enhResult
+  document.getElementById('diff-orig').innerHTML = oL.map((l,i)=>diffLineHtml(l,i+1)).join('')
+  document.getElementById('diff-enh').innerHTML  = eL.map((l,i)=>diffLineHtml(l,i+1)).join('')
 }
 
 function diffLineHtml(line, num) {
-  const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  '
-  return `<div class="diff-line ${line.type}"><span class="diff-num">${num}</span><span class="diff-text">${prefix}${escHtml(line.content)}</span></div>`
+  const p = line.type==='added'?'+ ':line.type==='removed'?'- ':'  '
+  return `<div class="diff-line ${line.type}"><span class="diff-num">${num}</span><span class="diff-text">${p}${escHtml(line.content)}</span></div>`
 }
 
 function toggleDiffFilter() {
@@ -529,130 +660,30 @@ function toggleDiffFilter() {
   paintDiff()
 }
 
-// ── Summary ────────────────────────────────────────────────────────
-function renderSummary(changesMade, origErrors, finalErrors) {
-  const stats = [
-    { label:'Changes Applied', value: changesMade.length, color:'#34a853' },
-    { label:'Original Errors', value: origErrors,         color: origErrors > 0 ? '#ea4335' : '#34a853' },
-    { label:'Final Errors',    value: finalErrors,        color: finalErrors > origErrors ? '#ea4335' : finalErrors > 0 ? '#fbbc04' : '#34a853' },
-  ]
-  let html = `<div class="stats-grid">${stats.map(s =>
-    `<div class="stat-box"><div class="stat-value" style="color:${s.color}">${s.value}</div><div class="stat-label">${s.label}</div></div>`
-  ).join('')}</div>`
-
-  if (changesMade.length > 0) {
-    const preview = changesMade.slice(0, CHANGES_PREVIEW)
-    let listHtml  = preview.map(c => `<li>${escHtml(c)}</li>`).join('')
-    listHtml += makeExpandBtn(changesMade, CHANGES_PREVIEW)
-    html += `
-      <div class="changes-list">
-        <div class="changes-list-header">Changes Applied (${changesMade.length})</div>
-        <ul>${listHtml}</ul>
-      </div>`
-  } else {
-    html += `<div class="changes-list"><div class="changes-list-empty">No changes recorded.</div></div>`
-  }
-
-  document.getElementById('tab-summary').innerHTML = html
-}
-
-// ── Endpoints ──────────────────────────────────────────────────────
-const METHOD_COLORS = { get:'#34a853', post:'#4285f4', put:'#fbbc04', patch:'#ff6d00', delete:'#e53935' }
-const HTTP_METHODS  = ['get','post','put','patch','delete','options','head']
-
-function renderEndpoints(spec) {
-  let html = ''
-  for (const [path, pathItem] of Object.entries(spec?.paths || {})) {
-    for (const method of HTTP_METHODS) {
-      const op = pathItem[method]
-      if (!op) continue
-      const total = countOpExamples(op)
-      const color = METHOD_COLORS[method] || '#888'
-      html += `
-        <div class="endpoint-row">
-          <span class="method-badge" style="background:${color}">${method}</span>
-          <span class="endpoint-path">${escHtml(path)}</span>
-          <span class="endpoint-summary">${escHtml(op.summary || '')}</span>
-          <span class="example-badge ${total > 0 ? 'has' : 'none'}">${total > 0 ? '+' + total + ' examples' : 'no examples'}</span>
-        </div>`
-    }
-  }
-  document.getElementById('tab-endpoints').innerHTML = html || '<p style="padding:24px;color:#888;text-align:center">No endpoints found.</p>'
-}
-
-// ── Tab switching ──────────────────────────────────────────────────
 function switchTab(name) {
-  ['yaml','diff','summary','endpoints'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none'
-    document.querySelector(`[data-tab="${t}"]`).classList.toggle('active', t === name)
+  ['yaml','diff'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===name ? '' : 'none'
+    document.querySelector(`[data-tab="${t}"]`).classList.toggle('active', t===name)
   })
 }
 
-// ── Copy / Download ────────────────────────────────────────────────
 function copyYaml() {
-  navigator.clipboard.writeText(state.result?.final_spec_yaml || '')
+  navigator.clipboard.writeText(_finalYaml || '')
   const btn = document.getElementById('copy-btn')
   btn.textContent = '✅ Copied'
-  setTimeout(() => btn.textContent = '📋 Copy', 2000)
+  setTimeout(()=>btn.textContent='📋 Copy', 2000)
 }
 
 function downloadYaml() {
-  const yaml = state.result?.final_spec_yaml || ''
   const name = (state.oasFile?.name || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
-  triggerDownload(yaml, name, 'text/yaml')
-}
-
-function triggerDownload(content, filename, type) {
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([content], { type }))
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(a.href)
+  a.href = URL.createObjectURL(new Blob([_finalYaml||''], {type:'text/yaml'}))
+  a.download = name; a.click(); URL.revokeObjectURL(a.href)
 }
 
-// ── Expand/collapse "more" buttons ─────────────────────────────────
-const _expandData = new Map()
-let   _expandId   = 0
-
-function makeExpandBtn(allItems, previewCount) {
-  const hidden = allItems.slice(previewCount)
-  if (!hidden.length) return ''
-  const id = ++_expandId
-  _expandData.set(id, hidden)
-  return `<button class="more-btn" data-eid="${id}" onclick="toggleMore(this)">+${hidden.length} more — click to expand</button>`
-}
-
-function toggleMore(btn) {
-  const items = _expandData.get(parseInt(btn.dataset.eid))
-  if (btn.dataset.expanded === '1') {
-    btn.parentElement.querySelectorAll('.extra-item').forEach(el => el.remove())
-    btn.textContent      = `+${items.length} more — click to expand`
-    btn.dataset.expanded = '0'
-  } else {
-    items.forEach(text => {
-      const li = document.createElement('li')
-      li.className = 'extra-item'
-      li.innerHTML  = escHtml(text)
-      btn.parentElement.insertBefore(li, btn)
-    })
-    btn.textContent      = '▲ show less'
-    btn.dataset.expanded = '1'
-  }
-}
-
-// ── Utilities ──────────────────────────────────────────────────────
 function escHtml(str) {
-  return String(str || '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
-
-// missing style for more-btn
-const style = document.createElement('style')
-style.textContent = '.more-btn { font-size:12px; color:#4285f4; cursor:pointer; margin-top:6px; background:none; border:none; padding:0; font-family:inherit; display:block; }'
-document.head.appendChild(style)
 </script>
 </body>
 </html>
