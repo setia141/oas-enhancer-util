@@ -13,9 +13,9 @@ For every operation, parameter, request body, response, and component schema:
 2. `example` — suggest a realistic short example for any schema property, parameter, request body, or response that is missing one
 3. `x-ai: true` — suggest this on every operation that does not already have it
 
-If a Postman collection is provided, also suggest corrections where:
-- A response schema field type or structure differs from what Postman shows
-- A request body field is missing that Postman shows being sent
+If a Postman collection is provided, also:
+- For any request body or response field that Postman shows but is completely absent from the spec's `properties` object: suggest adding it using `field: "schema_property"`. Set `location` to end at the property name inside `properties` (e.g. `requestBody.content.application/json.schema.properties.role`), and set `value` to the complete property schema inferred from the Postman data (e.g. `{"type": "string", "description": "User role"}`).
+- If a field exists in the spec but its type contradicts what Postman shows, suggest the corrected type using `field: "schema_property"` with the full corrected schema as value.
 
 ## Rules
 - Only suggest ADDING fields — never suggest changing or removing existing values

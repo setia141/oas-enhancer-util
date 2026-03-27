@@ -84,9 +84,10 @@
 
     .sugg-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
     .sugg-field-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
-    .sugg-field-badge.description { background:#e8f0fe; color:#1a73e8; }
-    .sugg-field-badge.example     { background:#e6f4ea; color:#34a853; }
-    .sugg-field-badge.x-ai        { background:#f3e8fd; color:#9334e6; }
+    .sugg-field-badge.description     { background:#e8f0fe; color:#1a73e8; }
+    .sugg-field-badge.example         { background:#e6f4ea; color:#34a853; }
+    .sugg-field-badge.x-ai            { background:#f3e8fd; color:#9334e6; }
+    .sugg-field-badge.schema_property { background:#fff3e0; color:#e65100; }
     .sugg-location { font-size:11px; font-family:monospace; color:#888; word-break:break-all; }
 
     .sugg-body { display:flex; align-items:flex-start; gap:12px; }
@@ -480,7 +481,9 @@ function buildSuggRow(idx) {
   row.className = 'suggestion-row ' + status
   row.id = 'sugg-row-' + idx
 
-  const valueText = s.field === 'x-ai' ? 'true' : String(s.value)
+  const valueText = s.field === 'x-ai' ? 'true'
+    : s.field === 'schema_property' ? JSON.stringify(s.value, null, 2)
+    : String(s.value)
 
   // Inline YAML context block
   let ctxHtml = ''
@@ -604,13 +607,13 @@ function updateToolbar() {
 async function applyAccepted() {
   const accepted = state.suggestions
     .filter(s => ['accepted','edited'].includes(s.status))
-    .map(s => ({
-      path:     s.path,
-      method:   s.method,
-      location: s.location,
-      field:    s.field,
-      value:    s.status === 'edited' ? (s.editedValue ?? s.value) : s.value,
-    }))
+    .map(s => {
+      let value = s.status === 'edited' ? (s.editedValue ?? s.value) : s.value
+      if (s.field === 'schema_property' && typeof value === 'string') {
+        try { value = JSON.parse(value) } catch { /* keep as string */ }
+      }
+      return { path: s.path, method: s.method, location: s.location, field: s.field, value }
+    })
 
   if (!accepted.length) {
     alert('No accepted suggestions to apply.')
