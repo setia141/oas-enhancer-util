@@ -40,17 +40,17 @@ ENHANCER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "enhanced_spec": {
-                        "type": "object",
-                        "description": "The COMPLETE enhanced OAS 3.x object — not a diff or partial update.",
-                    },
                     "changes_made": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Human-readable list of every change applied in this iteration.",
                     },
+                    "enhanced_spec": {
+                        "type": "object",
+                        "description": "The COMPLETE enhanced OAS 3.x object — not a diff or partial update.",
+                    },
                 },
-                "required": ["enhanced_spec", "changes_made"],
+                "required": ["changes_made", "enhanced_spec"],
             },
         },
     }

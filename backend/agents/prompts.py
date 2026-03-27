@@ -52,8 +52,8 @@ IMPORTANT: You must ALWAYS finish by calling the `save_enhanced_spec` tool. Neve
 - Maintain valid OAS 3.x structure throughout
 
 ## save_enhanced_spec arguments
+- `changes_made`: human-readable list of every change applied — fill this FIRST before the spec
 - `enhanced_spec`: the COMPLETE enhanced OAS 3.x object — not a diff or partial update
-- `changes_made`: human-readable list of every change applied
 
 You MUST call `save_enhanced_spec`. Do NOT write any text outside of tool calls.
 """
