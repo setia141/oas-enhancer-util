@@ -19,6 +19,14 @@ from .agents.tools import REVIEWER_TOOLS, ENHANCER_TOOLS, get_breaking_changes_p
 
 logger = logging.getLogger(__name__)
 
+# ── LLM call logger (writes to llm_calls.log) ──────────────────────────────────
+_llm_logger = logging.getLogger("llm_calls")
+_llm_logger.setLevel(logging.DEBUG)
+_llm_logger.propagate = False  # don't send to root logger / console
+_llm_log_handler = logging.FileHandler("llm_calls.log", encoding="utf-8")
+_llm_log_handler.setFormatter(logging.Formatter("%(asctime)s\n%(message)s\n"))
+_llm_logger.addHandler(_llm_log_handler)
+
 MAX_ITERATIONS     = int(os.environ.get("MAX_ITERATIONS", 5))
 REVIEWER_TIMEOUT   = 120   # seconds
 ENHANCER_TIMEOUT   = 600   # seconds
@@ -66,6 +74,7 @@ def init_client() -> None:
 async def _chat(payload: dict, timeout: int) -> str:
     """POST /chat/completions with stream=True. Returns concatenated tool call arguments."""
     payload = {**payload, "stream": True}
+    _llm_logger.debug("REQUEST\n%s", json.dumps(payload, indent=2, default=str))
     async with asyncio.timeout(timeout):
         async with _client.stream("POST", "/chat/completions", json=payload) as resp:
             resp.raise_for_status()
@@ -77,7 +86,8 @@ async def _chat(payload: dict, timeout: int) -> str:
                 for choice in chunk.get("choices", []):
                     for tc in (choice.get("delta", {}).get("tool_calls") or []):
                         tool_args += tc.get("function", {}).get("arguments", "")
-            return tool_args
+    _llm_logger.debug("RESPONSE\n%s", tool_args)
+    return tool_args
 
 
 # ── Agent calls ────────────────────────────────────────────────────────────────
