@@ -19,7 +19,7 @@ SUGGESTER_TOOLS = [
                             "properties": {
                                 "path": {
                                     "type": "string",
-                                    "description": "The API path, e.g. /users/{id}. Empty string for info-level or component suggestions.",
+                                    "description": "The API path, e.g. /users/{id}. MUST be empty string '' for info-level or component suggestions.",
                                 },
                                 "method": {
                                     "type": "string",
@@ -46,8 +46,9 @@ SUGGESTER_TOOLS = [
                                         "'x-ai.when-to-use-me' — single x-ai sub-tag; "
                                         "'x-ai.how-to-use-me' — single x-ai sub-tag; "
                                         "'x-ai.trigger-me-command' — single x-ai sub-tag; "
-                                        "'schemas.MySchema.description' — component schema description; "
-                                        "'schemas.MySchema.properties.fieldName.description' — component property description. "
+                                        "'schemas.MySchema.description' — component schema description (method=component, path=''); "
+                                        "'schemas.MySchema.properties.fieldName.description' — component property description (method=component, path=''). "
+                                        "NEVER put 'components/schemas/...' in path for component suggestions — path must be empty string. "
                                         "For Postman missing property: location ends at property name inside properties, "
                                         "e.g. 'requestBody.content.application/json.schema.properties.role'."
                                     ),

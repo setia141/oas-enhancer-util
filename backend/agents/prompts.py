@@ -32,14 +32,19 @@ VALUE_RULES = """
 ### description
 - One concise sentence starting with a verb ("Returns...", "Creates...", "Deletes...").
 - For info.description: outline the overall business purpose of the API in 1-2 sentences.
-- For request/response schemas: be specific about what the field means in the business context.
-- No filler words. No generic sentences like "This is the description of...".
+- For request/response schemas: explain the business purpose — why this field exists, not just what it is.
+  Bad: "Represents the user status." Good: "Controls whether the user can authenticate and access protected resources."
+- For enum fields: list what each value means, e.g. "Status of the order: 'pending' (awaiting payment), 'processing' (payment confirmed), 'shipped' (dispatched)."
+- For format fields (date-time, email, uuid, uri): mention the expected format in the description.
+- For fields with constraints (minLength, maximum, pattern): describe the constraint, e.g. "Must be between 1 and 100."
+- No filler words. No generic sentences like "This is the description of..." or "Represents the...".
 
 ### example
 - Must be a realistic, production-like value. Never use "string", "123", "example", or placeholders.
 - Dates: use ISO 8601 format (e.g. "2024-01-15T10:30:00Z").
 - IDs: use realistic prefixed formats (e.g. "usr_abc123", "ord_xyz789") unless spec implies integer.
 - Emails: use realistic domains (e.g. "john.doe@company.com").
+- Enums: pick the most commonly used value, not just the first one listed.
 
 ### x-ai (when location is `x-ai` — full object missing)
 Generate the complete x-ai object with all three sub-tags:

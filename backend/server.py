@@ -125,21 +125,26 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
     """Validate, then attach yaml_context to each suggestion.
 
     Any suggestion that would fail to apply (wrong location, $ref sibling,
-    path not found, etc.) is silently dropped here so it never reaches the UI.
+    path not found, etc.) is dropped and logged to drops_debug.log.
     """
     import copy
     enriched = []
+    dropped  = 0
     for s in suggestions:
         try:
             _apply_suggestion(copy.deepcopy(spec), s)
         except Exception as e:
             logger.warning(
-                "Dropping invalid suggestion %s → %s: [%s] %s",
-                s.get("method"), s.get("location"), type(e).__name__, e,
+                "Dropping %s %s → %s: %s",
+                s.get("method", ""), s.get("path", ""), s.get("location", ""), e,
             )
+            dropped += 1
             continue
-        ctx = _get_yaml_context(spec, s)
-        enriched.append({**s, "yaml_context": ctx})
+        enriched.append({**s, "yaml_context": _get_yaml_context(spec, s)})
+
+    if dropped:
+        logger.warning("%d suggestion(s) dropped during validation", dropped)
+
     return enriched
 
 

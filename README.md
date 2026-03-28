@@ -25,8 +25,8 @@ An AI-powered web tool that reviews your OpenAPI Specification and suggests impr
 ## How it works
 
 1. Upload an OAS 3.x file (JSON or YAML). Optionally upload a Postman collection.
-2. **Phase 1 — Spec Walker** scans the spec deterministically, producing a precise list of every missing field (descriptions, examples, x-ai sub-tags, info description).
-3. **Phase 2 — LLM** receives only the gap list and generates high-quality values for each one. If a Postman collection is provided, the LLM also finds schema differences (missing properties, type corrections, error codes, naming inconsistencies).
+2. **Phase 1 — Spec Walker** scans the spec deterministically, producing a precise list of every missing field (descriptions, examples, x-ai sub-tags, info description). Walks into `allOf` / `anyOf` / `oneOf` branches and nested object properties.
+3. **Phase 2 — LLM** receives the gap list in batches of 100. Each batch gets only the spec sections relevant to its gaps as context. Batches run concurrently (up to 5 at a time). If a Postman collection is provided, the LLM also finds schema differences in a separate call.
 4. You see every suggestion with its location in the spec. Click **Accept**, **Edit**, or **Reject** for each one.
 5. Click **Apply** — only accepted suggestions are written to the spec.
 6. A diff view shows exactly what changed. Download the enhanced YAML.
@@ -60,38 +60,52 @@ Your review progress is auto-saved in the browser. If you close the tab mid-revi
           │    + example            │             │
           │  • schema property      │             │
           │    description + example│             │
+          │  • allOf/anyOf/oneOf    │             │
+          │    branches (recursive) │             │
           │  • x-ai (full object    │             │
           │    + each sub-tag)      │             │
           │                         │             │
           │  Rule: field absent?    │             │
           │  YES → GAP              │             │
-          │  NO  → skip (no quality │             │
-          │        judgement)       │             │
+          │  NO  → skip             │             │
           └────────────┬────────────┘             │
                        │                          │
                   Gap list                        │
                   (precise locations)             │
                        │                          │
+          ┌────────────▼────────────┐             │
+          │   PHASE 2 — LLM BATCHES │             │
+          │   (gpt-4.1-mini)        │             │
+          │                         │             │
+          │  Gaps split into        │             │
+          │  batches of 100.        │             │
+          │  Each batch gets only   │             │
+          │  its relevant spec      │             │
+          │  sections as context.   │             │
+          │  Up to 5 run in         │             │
+          │  parallel.              │             │
+          │                         │             │
+          │  Generates values for   │             │
+          │  every gap — no         │             │
+          │  searching, gaps are    │             │
+          │  already known.         │             │
+          └────────────┬────────────┘             │
+                       │                          │
+                       │            ┌─────────────▼──────────────┐
+                       │            │  POSTMAN ANALYSIS           │
+                       │            │  (separate single LLM call) │
+                       │            │                             │
+                       │            │  Full spec + collection     │
+                       │            │  sent together.             │
+                       │            │                             │
+                       │            │  • Naming inconsistencies   │
+                       │            │  • Missing properties       │
+                       │            │  • Type corrections         │
+                       │            │  • Missing error codes      │
+                       │            │  • Required fields          │
+                       │            └─────────────┬──────────────┘
+                       │                          │
           ┌────────────▼──────────────────────────▼───────┐
-          │   PHASE 2 — LLM  (gpt-4.1-mini)               │
-          │                                                │
-          │  Given the gap list + spec for context:        │
-          │  • Generates values for every gap              │
-          │    (no searching — gaps are already known)     │
-          │                                                │
-          │  If Postman provided:                          │
-          │  • Naming inconsistencies → schema_property    │
-          │  • Missing fields → schema_property            │
-          │  • Type corrections → schema_property          │
-          │  • Missing error codes → response object       │
-          │  • Required fields → required array            │
-          └────────────────────────┬───────────────────────┘
-                                   │
-                              Suggestions
-                         (path · method · location
-                          · field · value · reason)
-                                   │
-          ┌────────────────────────▼───────────────────────┐
           │   PHASE 3 — PRE-VALIDATION (server.py)         │
           │                                                │
           │  Dry-runs each suggestion against spec.        │
@@ -136,8 +150,9 @@ This tool separates the two jobs:
 
 **Result:**
 - Re-running the tool on an already-enhanced spec finds zero walker gaps — no false positives
-- The LLM prompt is focused: "here are 47 specific locations, generate a value for each" — not "review the whole spec"
-- Quality is enforced at generation time (VALUE_RULES) and review time (human accepts/edits/rejects), not by gaming-prone static checks
+- Each LLM batch is focused: "here are 100 specific locations and their spec context — generate a value for each"
+- Context sent per batch is only the operations/schemas relevant to that batch, not the whole spec
+- Quality is enforced at generation time (VALUE_RULES) and review time (human accepts/edits/rejects)
 
 ---
 
@@ -152,7 +167,7 @@ Flask Frontend  (flask_ui — port 3000)
    ▼
 FastAPI Backend  (backend — port 8000)
    │
-   ├── POST /suggest — runs walker → LLM, streams suggestions via SSE
+   ├── POST /suggest — runs walker → LLM batches, streams suggestions via SSE
    └── POST /apply   — applies accepted suggestions, returns diff YAML
 ```
 
@@ -168,7 +183,7 @@ oas-enhancer-util/
 │
 ├── backend/                      # FastAPI backend
 │   ├── server.py                 # /suggest (SSE), /apply, /health endpoints
-│   ├── loop_runner.py            # Walker → LLM pipeline, heartbeat, SSE
+│   ├── loop_runner.py            # Walker → LLM pipeline, batching, heartbeat
 │   ├── spec_walker.py            # ← Phase 1: deterministic gap finder
 │   ├── requirements.txt
 │   ├── .env.example
@@ -182,6 +197,10 @@ oas-enhancer-util/
 │   ├── .env.example
 │   └── templates/
 │       └── index.html            # Single-page review UI
+│
+├── logs/                         # Runtime logs (git-ignored)
+│   ├── gaps.log                  # Gap list written before each LLM run
+│   └── llm_calls.log             # Full LLM request/response log
 │
 ├── docker-compose.yml
 ├── test_postman_spec.yaml        # Sample spec for testing
@@ -279,7 +298,7 @@ All rules live in **`backend/agents/prompts.py`**. There are three sections to e
 
 ### `WALK_RULES` — what the scanner looks for
 
-Controls the **spec walker** (Phase 1). These are presence checks only — the walker flags a field as a gap if it is absent or empty. There is no quality judgement here; that is the LLM's job.
+Controls the **spec walker** (Phase 1). These are presence checks only — the walker flags a field as a gap if it is absent or empty. No quality judgement here; that is the LLM's job.
 
 ```python
 WALK_RULES = WalkRules(
@@ -311,11 +330,13 @@ Controls **quality of generated content** (Phase 2). The LLM follows these rules
 Current rules (edit to match your standards):
 
 ```
-description  — one sentence starting with a verb. For info.description: outline
-               the business purpose. For schemas: specific to the business context.
+description  — one sentence starting with a verb. Explain business purpose,
+               not just what the field is. For enums: describe each value.
+               For format/constraint fields: mention the format or constraint.
 
-example      — realistic, production-like. ISO 8601 dates. Prefixed IDs (usr_abc123).
+example      — realistic, production-like. ISO 8601 dates. Prefixed IDs.
                Never "string", "123", or placeholders.
+               For enums: pick the most commonly used value.
 
 x-ai         — complete object with:
                  when-to-use-me:     business scenario that triggers this endpoint
@@ -463,10 +484,15 @@ Confirm `BACKEND_URL` in `flask_ui/.env` matches the backend host/port.
 This happens when a Postman collection is uploaded. The walker found no missing fields, but the LLM still runs to check Postman differences (naming, types, error codes). This is correct behaviour.
 
 ### Walker finds 0 gaps and no Postman — tool returns "spec is complete"
-The spec already has all required fields. No LLM call is made. If you believe fields are missing, enable `DEBUG` logging to trace the walker's decisions field by field.
+The spec already has all required fields. No LLM call is made. If you believe fields are missing, check `WALK_RULES` in `backend/agents/prompts.py` — a rule may be disabled.
 
 ### Suggestions show 0 after upload
 The spec may have no `paths`. Confirm you uploaded an OAS 3.x file with a `paths` key, not a Postman collection or Swagger 2.0 file.
 
 ### Resume banner not appearing after reload
 The banner only appears if you had previously loaded suggestions and made at least one accept/reject decision.
+
+### How to debug LLM issues
+After each run, check the `logs/` directory:
+- `logs/gaps.log` — full list of gaps sent to the LLM
+- `logs/llm_calls.log` — raw LLM request and response payloads (DEBUG level)
