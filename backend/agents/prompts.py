@@ -35,12 +35,15 @@ WALK_RULES = WalkRules(
 # CUSTOMISE THIS — how the LLM should generate values
 # The LLM only generates values for gaps already found by the walker.
 # It does NOT search the spec — the walker already did that.
+#
+# For x-ai: replace the value below with your company's actual x-ai structure.
+# Whatever you write here is what the LLM will use as the value for every x-ai gap.
 # ─────────────────────────────────────────────────────────────────────────────
 
 VALUE_RULES = """
 - `description`: one concise sentence starting with a verb (e.g. "Returns...", "Creates...", "Deletes..."). No filler.
 - `example`: a realistic, production-like value. Never use "string", "123", "example", or other placeholders.
-- `x-ai`: replace this line entirely with your company's actual x-ai structure and value. Example: {"enabled": true, "model": "gpt-4"}
+- `x-ai`: use the value {"enabled": true, "model": "gpt-4"}
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
