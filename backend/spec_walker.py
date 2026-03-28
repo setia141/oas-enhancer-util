@@ -39,10 +39,10 @@ class WalkRules:
 
 @dataclass
 class Gap:
-    path:     str   # API path, e.g. /users/{id}  (empty for components)
-    method:   str   # HTTP method lowercase, or "component"
-    location: str   # dot-notation within the operation/component
-    field:    str   # "description" | "example" | "x-ai"
+    path:      str   # API path, e.g. /users/{id}  (empty for components)
+    method:    str   # HTTP method lowercase, or "component"
+    location:  str   # dot-notation within the operation/component
+    field:     str   # "description" | "example" | "x-ai"
     is_update: bool = False  # True when field exists but is poor quality
 
 
@@ -68,22 +68,48 @@ def _has_ref(obj) -> bool:
     return isinstance(obj, dict) and "$ref" in obj
 
 
+def _gap(path, method, location, field, is_update=False) -> Gap:
+    """Create a Gap and log it at DEBUG level."""
+    action = "UPDATE" if is_update else "NEW"
+    logger.debug("  GAP [%s] %s %s → %s (%s)", action, method.upper(), path or location, location, field)
+    return Gap(path, method, location, field, is_update=is_update)
+
+
+def _skip(reason: str, context: str) -> None:
+    logger.debug("  SKIP %s — %s", context, reason)
+
+
 def _walk_schema_properties(
     path: str, method: str,
     schema: dict, props_location: str,
     rules: WalkRules, gaps: list[Gap],
 ) -> None:
     """Recurse into schema properties, skip $ref entries."""
-    for prop_name, prop_schema in schema.get("properties", {}).items():
-        if not isinstance(prop_schema, dict) or _has_ref(prop_schema):
-            continue
+    properties = schema.get("properties", {})
+    if not properties:
+        return
+
+    logger.debug("    Checking %d properties at %s", len(properties), props_location)
+    for prop_name, prop_schema in properties.items():
         base = f"{props_location}.{prop_name}"
+        if not isinstance(prop_schema, dict):
+            _skip("not a dict", base)
+            continue
+        if _has_ref(prop_schema):
+            _skip("$ref — cannot add siblings in OAS 3.0", base)
+            continue
         if rules.description:
-            exists = "description" in prop_schema
-            if _poor_description(prop_schema.get("description"), rules):
-                gaps.append(Gap(path, method, f"{base}.description", "description", is_update=exists))
-        if rules.example and "example" not in prop_schema:
-            gaps.append(Gap(path, method, f"{base}.example", "example"))
+            existing = prop_schema.get("description")
+            if _poor_description(existing, rules):
+                gaps.append(_gap(path, method, f"{base}.description", "description",
+                                 is_update=existing is not None))
+            else:
+                logger.debug("    OK  description at %s.description = %r", base, existing)
+        if rules.example:
+            if "example" not in prop_schema:
+                gaps.append(_gap(path, method, f"{base}.example", "example"))
+            else:
+                logger.debug("    OK  example at %s.example", base)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -97,9 +123,18 @@ def walk(spec: dict, rules: WalkRules) -> list[Gap]:
     """
     gaps: list[Gap] = []
 
+    paths      = spec.get("paths", {})
+    components = spec.get("components", {}).get("schemas", {})
+    logger.info(
+        "Walker starting — %d path(s), %d component schema(s), rules: description=%s example=%s x_ai=%s",
+        len(paths), len(components),
+        rules.description, rules.example, rules.x_ai,
+    )
+
     # ── Paths ────────────────────────────────────────────────────────────────
-    for path, path_item in spec.get("paths", {}).items():
+    for path, path_item in paths.items():
         if not isinstance(path_item, dict):
+            _skip("path item is not a dict", path)
             continue
 
         for method in ("get", "post", "put", "patch", "delete", "head", "options"):
@@ -107,81 +142,141 @@ def walk(spec: dict, rules: WalkRules) -> list[Gap]:
             if not isinstance(operation, dict):
                 continue
 
+            op_label = f"{method.upper()} {path}"
+            logger.debug("Checking operation %s", op_label)
+
             # Operation-level description
             if rules.description:
-                exists = "description" in operation
-                if _poor_description(operation.get("description"), rules):
-                    gaps.append(Gap(path, method, "description", "description", is_update=exists))
+                existing = operation.get("description")
+                if _poor_description(existing, rules):
+                    gaps.append(_gap(path, method, "description", "description",
+                                     is_update=existing is not None))
+                else:
+                    logger.debug("  OK  operation description = %r", existing)
 
             # x-ai extension
-            if rules.x_ai and "x-ai" not in operation:
-                gaps.append(Gap(path, method, "x-ai", "x-ai"))
+            if rules.x_ai:
+                if "x-ai" not in operation:
+                    gaps.append(_gap(path, method, "x-ai", "x-ai"))
+                else:
+                    logger.debug("  OK  x-ai already present")
 
             # Parameters
-            for i, param in enumerate(operation.get("parameters", [])):
-                if not isinstance(param, dict) or _has_ref(param):
+            params = operation.get("parameters", [])
+            logger.debug("  Checking %d parameter(s)", len(params))
+            for i, param in enumerate(params):
+                p_label = f"{op_label} param[{i}] name={param.get('name', '?')!r}"
+                if not isinstance(param, dict):
+                    _skip("not a dict", p_label)
+                    continue
+                if _has_ref(param):
+                    _skip("$ref parameter — resolve before suggesting", p_label)
                     continue
                 schema = param.get("schema") or {}
                 if _has_ref(schema):
+                    _skip("$ref schema — cannot add siblings", p_label)
                     continue
                 if rules.description:
-                    exists = "description" in param
-                    if _poor_description(param.get("description"), rules):
-                        gaps.append(Gap(path, method, f"parameters.{i}.description", "description", is_update=exists))
-                if rules.example and "example" not in schema:
-                    gaps.append(Gap(path, method, f"parameters.{i}.schema.example", "example"))
+                    existing = param.get("description")
+                    if _poor_description(existing, rules):
+                        gaps.append(_gap(path, method, f"parameters.{i}.description", "description",
+                                         is_update=existing is not None))
+                    else:
+                        logger.debug("  OK  %s description = %r", p_label, existing)
+                if rules.example:
+                    if "example" not in schema:
+                        gaps.append(_gap(path, method, f"parameters.{i}.schema.example", "example"))
+                    else:
+                        logger.debug("  OK  %s example present", p_label)
 
             # Request body
             req_body = operation.get("requestBody")
-            if isinstance(req_body, dict) and not _has_ref(req_body):
+            if req_body is None:
+                logger.debug("  No requestBody for %s", op_label)
+            elif _has_ref(req_body):
+                _skip("$ref requestBody — resolve before suggesting", op_label)
+            else:
+                logger.debug("  Checking requestBody for %s", op_label)
                 if rules.description:
-                    exists = "description" in req_body
-                    if _poor_description(req_body.get("description"), rules):
-                        gaps.append(Gap(path, method, "requestBody.description", "description", is_update=exists))
+                    existing = req_body.get("description")
+                    if _poor_description(existing, rules):
+                        gaps.append(_gap(path, method, "requestBody.description", "description",
+                                         is_update=existing is not None))
+                    else:
+                        logger.debug("  OK  requestBody description = %r", existing)
                 for ct, content in req_body.get("content", {}).items():
                     if not isinstance(content, dict):
                         continue
                     schema = content.get("schema") or {}
                     if _has_ref(schema):
+                        _skip(f"$ref schema in requestBody content {ct!r}", op_label)
                         continue
                     loc = f"requestBody.content.{ct}.schema"
-                    if rules.example and "example" not in schema:
-                        gaps.append(Gap(path, method, f"{loc}.example", "example"))
+                    if rules.example:
+                        if "example" not in schema:
+                            gaps.append(_gap(path, method, f"{loc}.example", "example"))
+                        else:
+                            logger.debug("  OK  requestBody %s example present", ct)
                     _walk_schema_properties(path, method, schema, f"{loc}.properties", rules, gaps)
 
             # Responses
-            for status_code, response in operation.get("responses", {}).items():
-                if not isinstance(response, dict) or _has_ref(response):
+            responses = operation.get("responses", {})
+            logger.debug("  Checking %d response(s) for %s", len(responses), op_label)
+            for status_code, response in responses.items():
+                r_label = f"{op_label} response[{status_code}]"
+                if not isinstance(response, dict):
+                    _skip("not a dict", r_label)
+                    continue
+                if _has_ref(response):
+                    _skip("$ref response — resolve before suggesting", r_label)
                     continue
                 if rules.description:
-                    exists = "description" in response
-                    if _poor_description(response.get("description"), rules):
-                        gaps.append(Gap(path, method, f"responses.{status_code}.description", "description", is_update=exists))
+                    existing = response.get("description")
+                    if _poor_description(existing, rules):
+                        gaps.append(_gap(path, method, f"responses.{status_code}.description", "description",
+                                         is_update=existing is not None))
+                    else:
+                        logger.debug("  OK  %s description = %r", r_label, existing)
                 for ct, content in response.get("content", {}).items():
                     if not isinstance(content, dict):
                         continue
                     schema = content.get("schema") or {}
                     if _has_ref(schema):
+                        _skip(f"$ref schema in response {status_code} content {ct!r}", op_label)
                         continue
                     loc = f"responses.{status_code}.content.{ct}.schema"
-                    if rules.example and "example" not in schema:
-                        gaps.append(Gap(path, method, f"{loc}.example", "example"))
+                    if rules.example:
+                        if "example" not in schema:
+                            gaps.append(_gap(path, method, f"{loc}.example", "example"))
+                        else:
+                            logger.debug("  OK  response %s %s example present", status_code, ct)
                     _walk_schema_properties(path, method, schema, f"{loc}.properties", rules, gaps)
 
     # ── Components / schemas ─────────────────────────────────────────────────
-    for schema_name, schema in spec.get("components", {}).get("schemas", {}).items():
-        if not isinstance(schema, dict) or _has_ref(schema):
+    if components:
+        logger.debug("Checking %d component schema(s)", len(components))
+    for schema_name, schema in components.items():
+        c_label = f"component/schemas/{schema_name}"
+        if not isinstance(schema, dict):
+            _skip("not a dict", c_label)
             continue
+        if _has_ref(schema):
+            _skip("$ref — entire schema is a reference", c_label)
+            continue
+        logger.debug("  Checking %s", c_label)
         if rules.description:
-            exists = "description" in schema
-            if _poor_description(schema.get("description"), rules):
-                gaps.append(Gap("", "component", f"schemas.{schema_name}.description", "description", is_update=exists))
+            existing = schema.get("description")
+            if _poor_description(existing, rules):
+                gaps.append(_gap("", "component", f"schemas.{schema_name}.description", "description",
+                                 is_update=existing is not None))
+            else:
+                logger.debug("  OK  %s description = %r", c_label, existing)
         _walk_schema_properties("", "component", schema, f"schemas.{schema_name}.properties", rules, gaps)
 
+    new_count    = sum(1 for g in gaps if not g.is_update)
+    update_count = sum(1 for g in gaps if g.is_update)
     logger.info(
-        "Walker: %d gaps found (%d updates, %d new)",
-        len(gaps),
-        sum(1 for g in gaps if g.is_update),
-        sum(1 for g in gaps if not g.is_update),
+        "Walker done — %d gap(s) total: %d new (field missing), %d update (field poor quality)",
+        len(gaps), new_count, update_count,
     )
     return gaps
