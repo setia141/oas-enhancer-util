@@ -485,9 +485,9 @@ function buildSuggRow(idx) {
   row.id = 'sugg-row-' + idx
 
   const displayVal = s.editedValue !== undefined ? s.editedValue : s.value
-  const valueText = s.field === 'x-ai' ? 'true'
-    : s.field === 'schema_property' ? JSON.stringify(displayVal, null, 2)
-    : String(displayVal)
+  const valueText = (displayVal !== null && typeof displayVal === 'object')
+    ? JSON.stringify(displayVal, null, 2)
+    : String(displayVal ?? '')
 
   // Inline YAML context block
   let ctxHtml = ''
@@ -503,7 +503,10 @@ function buildSuggRow(idx) {
   }
 
   const editHidden = status === 'edited' ? '' : 'display:none'
-  const editVal    = escHtml(String(s.editedValue ?? s.value))
+  const _rawEdit   = s.editedValue !== undefined ? s.editedValue : s.value
+  const editVal    = escHtml((_rawEdit !== null && typeof _rawEdit === 'object')
+    ? JSON.stringify(_rawEdit, null, 2)
+    : String(_rawEdit ?? ''))
 
   row.innerHTML = `
     <div class="sugg-card">
@@ -624,8 +627,10 @@ async function applyAccepted() {
   const accepted = state.suggestions
     .filter(s => ['accepted','edited'].includes(s.status))
     .map(s => {
-      let value = s.status === 'edited' ? (s.editedValue ?? s.value) : s.value
-      if (s.field === 'schema_property' && typeof value === 'string') {
+      // editedValue always wins if the user touched the textarea, regardless of current status
+      let value = s.editedValue !== undefined ? s.editedValue : s.value
+      // parse JSON strings back to objects for fields that expect objects
+      if ((s.field === 'schema_property' || s.field === 'x-ai') && typeof value === 'string') {
         try { value = JSON.parse(value) } catch { /* keep as string */ }
       }
       return { path: s.path, method: s.method, location: s.location, field: s.field, value }
@@ -671,16 +676,8 @@ function switchTab(tab) {
   document.getElementById('tab-yaml').classList.toggle('active', !isDiff)
 }
 
-function diffLines(a, b) {
+function _lcs(a, b) {
   const m = a.length, n = b.length
-  // Safety cap for very large specs
-  if (m * n > 4000000) {
-    const bSet = new Set(b), res = []
-    a.forEach(l => res.push({ type: bSet.has(l) ? 'equal' : 'remove', line: l }))
-    const aSet = new Set(a)
-    b.forEach(l => { if (!aSet.has(l)) res.push({ type: 'add', line: l }) })
-    return res
-  }
   const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1))
   for (let i = m - 1; i >= 0; i--)
     for (let j = n - 1; j >= 0; j--)
@@ -690,7 +687,31 @@ function diffLines(a, b) {
   while (i < m || j < n) {
     if (i < m && j < n && a[i] === b[j]) { res.push({ type:'equal',  line:a[i] }); i++; j++ }
     else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) { res.push({ type:'add',    line:b[j] }); j++ }
-    else  { res.push({ type:'remove', line:a[i] }); i++ }
+    else { res.push({ type:'remove', line:a[i] }); i++ }
+  }
+  return res
+}
+
+function diffLines(a, b) {
+  const CHUNK = 400   // lines per chunk — keeps memory bounded on large specs
+  const m = a.length, n = b.length
+
+  // For small specs run LCS directly
+  if (m <= CHUNK && n <= CHUNK) return _lcs(a, b)
+
+  // For large specs: split both into chunks by index ratio and diff each chunk.
+  // This is approximate (may miss cross-chunk moves) but is correct for the
+  // common case where suggestions add lines near their insertion point.
+  const res = []
+  const ratio = n / (m || 1)
+  let ai = 0, bi = 0
+  while (ai < m || bi < n) {
+    const aEnd = Math.min(ai + CHUNK, m)
+    const bEnd = Math.min(bi + CHUNK, n)
+    const chunk = _lcs(a.slice(ai, aEnd), b.slice(bi, bEnd))
+    res.push(...chunk)
+    ai = aEnd
+    bi = bEnd
   }
   return res
 }
