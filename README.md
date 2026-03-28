@@ -202,6 +202,9 @@ oas-enhancer-util/
 │   ├── gaps.log                  # Gap list written before each LLM run
 │   └── llm_calls.log             # Full LLM request/response log
 │
+├── .cache/                       # Suggestion cache (git-ignored)
+│   └── {sha256}.json             # Cached suggestions keyed on spec+postman+rules hash
+│
 ├── docker-compose.yml
 ├── test_postman_spec.yaml        # Sample spec for testing
 ├── test_postman_collection.json  # Sample Postman collection for testing
@@ -496,3 +499,20 @@ The banner only appears if you had previously loaded suggestions and made at lea
 After each run, check the `logs/` directory:
 - `logs/gaps.log` — full list of gaps sent to the LLM
 - `logs/llm_calls.log` — raw LLM request and response payloads (DEBUG level)
+
+If a batch logs `possible output truncation`, reduce `BATCH_SIZE` or increase `BATCH_TOKENS` in `loop_runner.py`.
+
+### Clearing the suggestion cache
+Delete the `.cache/` directory to force a fresh LLM run:
+```bash
+rm -rf .cache/
+```
+The cache is automatically invalidated when `backend/agents/prompts.py` changes (rules update = new cache key). No manual clearing needed for rule changes.
+
+### Tuning batch size for your model
+Edit `BATCH_SIZE` and `BATCH_TOKENS` at the top of `backend/loop_runner.py`:
+
+| Model | BATCH_SIZE | BATCH_TOKENS |
+|---|---|---|
+| `gpt-4.1-mini` | 100 | 32768 |
+| `gpt-5-mini` / `gpt-5-nano` | 500 | 120000 |

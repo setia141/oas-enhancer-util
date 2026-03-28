@@ -217,3 +217,4 @@ backend/tools/__pycache__/
 frontend/.next/
 frontend/.env.example
 logs/*.log
+.cache/
