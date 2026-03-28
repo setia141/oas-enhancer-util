@@ -165,8 +165,10 @@ async def suggest(
         try:
             async for event in get_suggestions(oas_spec, postman_text, has_postman):
                 if event.get("type") == "done":
-                    # Enrich suggestions with YAML context before sending
                     event["suggestions"] = _enrich_suggestions(event["spec"], event["suggestions"])
+                    if not event["suggestions"]:
+                        yield f"data: {_dumps({'type': 'error', 'message': 'No applicable suggestions found. The spec may already be complete, or all suggestions were invalid (e.g. targeting $ref sibling locations). Check server logs for details.'})} \n\n"
+                        return
                 yield f"data: {_dumps(event)}\n\n"
         except Exception as e:
             yield f"data: {_dumps({'type': 'error', 'message': str(e)})}\n\n"
