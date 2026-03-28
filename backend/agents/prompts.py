@@ -16,7 +16,7 @@ How to customise:
 ENHANCEMENT_RULES = """
 - `description` — suggest a concise one-sentence description for any operation, parameter, request body, response, or schema property that is missing one
 - `example` — suggest a realistic short example for any schema property, parameter, request body, or response that is missing one
-- `x-ai: true` — suggest this on every operation that does not already have it
+- `x-ai` — suggest this extension on every operation that does not already have it, using the value appropriate for your company (e.g. replace this rule entirely with your company's actual x-ai structure and value)
 """
 
 # ─────────────────────────────────────────────────────────────────────────────

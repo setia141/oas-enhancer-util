@@ -55,8 +55,8 @@ SUGGESTER_TOOLS = [
                                 },
                                 "value": {
                                     "description": (
-                                        "The suggested value. String for description, any valid JSON value for example, "
-                                        "true for x-ai, a complete schema object e.g. {\"type\": \"string\", \"description\": \"...\"} for schema_property."
+                                        "The suggested value. String for description, any valid JSON value for example or x-ai, "
+                                        "a complete schema object e.g. {\"type\": \"string\", \"description\": \"...\"} for schema_property."
                                     ),
                                 },
                                 "reason": {

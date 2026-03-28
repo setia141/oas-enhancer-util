@@ -101,10 +101,7 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
     # Format the inserted line with matching indentation
     final_key = parts[-1]
     pad = " " * indent
-    if field == "x-ai":
-        inserted_line = f"{pad}{final_key}: true"
-    else:
-        inserted_line = f"{pad}{final_key}: {json.dumps(value)}"
+    inserted_line = f"{pad}{final_key}: {json.dumps(value)}"
 
     return {"context_lines": context_lines, "inserted_line": inserted_line}
 
