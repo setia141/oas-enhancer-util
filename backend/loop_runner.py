@@ -93,8 +93,7 @@ def _format_gaps_for_prompt(gaps: list[Gap]) -> str:
             current_key = op_key
 
         gap_num += 1
-        update_note = " [UPDATE — current value is poor quality]" if g.is_update else ""
-        lines.append(f"{gap_num}. location: `{g.location}` | field: `{g.field}`{update_note}")
+        lines.append(f"{gap_num}. location: `{g.location}` | field: `{g.field}`")
 
     lines.append("")
     lines.append(f"Total: {gap_num} gaps. You MUST include all {gap_num} in submit_suggestions.")
