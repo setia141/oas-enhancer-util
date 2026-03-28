@@ -1,6 +1,11 @@
 """
-Single LLM call — returns suggestions for user review.
-No spec patching here. Patching happens in server.py after user accepts.
+Two-phase suggestion engine.
+
+Phase 1 — spec_walker: deterministic tree walk, finds all gaps (no LLM).
+Phase 2 — LLM: generates values only for the gaps found by the walker.
+
+Postman analysis (schema_property gaps) is appended as a separate task
+to the same LLM call when a Postman collection is provided.
 """
 import asyncio
 import json
@@ -12,8 +17,9 @@ from typing import AsyncGenerator
 import httpx
 import yaml
 
-from .agents.prompts import SUGGESTER_INSTRUCTION
+from .agents.prompts import SUGGESTER_INSTRUCTION, WALK_RULES, POSTMAN_RULES
 from .agents.tools import SUGGESTER_TOOLS
+from .spec_walker import walk, Gap
 
 logger = logging.getLogger(__name__)
 
@@ -68,20 +74,69 @@ async def _chat(payload: dict, timeout: int) -> str:
     return tool_args
 
 
-async def _run_suggester(oas_spec: dict, postman_text: str | None, has_postman: bool) -> list[dict]:
-    spec_yaml = _to_yaml(oas_spec)
-    logger.info("Suggester starting — %d bytes, %d paths", len(spec_yaml), len(oas_spec.get("paths", {})))
+def _format_gaps_for_prompt(gaps: list[Gap]) -> str:
+    """
+    Format the gap list as a numbered section for the LLM prompt.
+    Gaps are grouped by operation so the LLM sees them in context.
+    """
+    if not gaps:
+        return ""
+
+    lines = ["## Gaps to fill", ""]
+    current_key = None
+    gap_num = 0
+
+    for g in gaps:
+        op_key = f"{g.method.upper()} {g.path}" if g.method != "component" else f"Component {g.location.split('.')[1] if '.' in g.location else g.location}"
+        if op_key != current_key:
+            lines.append(f"### {op_key}")
+            current_key = op_key
+
+        gap_num += 1
+        update_note = " [UPDATE — current value is poor quality]" if g.is_update else ""
+        lines.append(f"{gap_num}. location: `{g.location}` | field: `{g.field}`{update_note}")
+
+    lines.append("")
+    lines.append(f"Total: {gap_num} gaps. You MUST include all {gap_num} in submit_suggestions.")
+    return "\n".join(lines)
+
+
+async def _run_suggester(
+    oas_spec:     dict,
+    postman_text: str | None,
+    has_postman:  bool,
+) -> list[dict]:
+    # ── Phase 1: deterministic walker ────────────────────────────────────────
+    gaps = walk(oas_spec, WALK_RULES)
+
+    if not gaps and not has_postman:
+        logger.info("Walker found no gaps and no Postman collection — spec is complete")
+        return []
+
+    # ── Phase 2: LLM generates values ────────────────────────────────────────
+    spec_yaml   = _to_yaml(oas_spec)
+    gaps_prompt = _format_gaps_for_prompt(gaps)
 
     user_content = f"OAS Spec (YAML):\n{spec_yaml}"
+    if gaps_prompt:
+        user_content += f"\n\n{gaps_prompt}"
     if has_postman and postman_text:
-        user_content += f"\n\nPostman Collection:\n{postman_text}"
+        user_content += f"\n\nPostman Collection (find schema_property gaps only):\n{postman_text}"
+
+    logger.info(
+        "Sending %d gaps to LLM%s",
+        len(gaps),
+        " + Postman analysis" if has_postman else "",
+    )
 
     t0 = time.monotonic()
     try:
         tool_args = await _chat({
             "model":       SUGGESTER_MODEL,
-            "messages":    [{"role": "system", "content": SUGGESTER_INSTRUCTION},
-                            {"role": "user",   "content": user_content}],
+            "messages":    [
+                {"role": "system", "content": SUGGESTER_INSTRUCTION},
+                {"role": "user",   "content": user_content},
+            ],
             "tools":       SUGGESTER_TOOLS,
             "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
             "max_tokens":  16384,
@@ -89,23 +144,23 @@ async def _run_suggester(oas_spec: dict, postman_text: str | None, has_postman: 
 
         elapsed = time.monotonic() - t0
         if not tool_args:
-            logger.warning("Suggester returned no tool call (%.1fs)", elapsed)
+            logger.warning("LLM returned no tool call (%.1fs)", elapsed)
             return []
 
         try:
             args = json.loads(tool_args)
         except json.JSONDecodeError:
-            logger.error("Suggester output truncated")
+            logger.error("LLM output truncated or malformed")
             return []
 
         suggestions = args.get("suggestions", [])
-        logger.info("Suggester done in %.1fs — %d suggestion(s)", elapsed, len(suggestions))
+        logger.info("LLM done in %.1fs — %d suggestion(s)", elapsed, len(suggestions))
         return suggestions
 
     except TimeoutError:
-        logger.error("Suggester timed out after %ds", SUGGESTER_TIMEOUT)
+        logger.error("LLM timed out after %ds", SUGGESTER_TIMEOUT)
     except Exception as e:
-        logger.error("Suggester error: %s", e, exc_info=True)
+        logger.error("LLM error: %s", e, exc_info=True)
 
     return []
 
@@ -148,8 +203,8 @@ async def get_suggestions(
         else:
             suggestions = _hb
 
-    if not suggestions:
-        yield {"type": "error", "message": "No suggestions returned. The spec may already be complete or the model timed out."}
+    if suggestions is None or (not suggestions and not has_postman):
+        yield {"type": "error", "message": "No gaps found — the spec appears complete."}
         return
 
     yield {"type": "done", "suggestions": suggestions, "spec": oas_spec, "original_yaml": _to_yaml(oas_spec)}

@@ -2,25 +2,51 @@
 OAS Enhancer prompts.
 
 How to customise:
-  - Change ENHANCEMENT_RULES to match your company's documentation standards.
-  - Change POSTMAN_RULES to match what you want cross-checked against Postman.
-  - Do NOT change SUGGESTER_INSTRUCTION or _FORMAT_RULES — those control
-    OAS structural correctness and tool-call format.
+  - Change WALK_RULES to control what the code scanner looks for and what
+    counts as "poor quality". No LLM involved here.
+  - Change VALUE_RULES to tell the LLM how to generate good values.
+  - Change POSTMAN_RULES to control what Postman cross-checking does.
+  - Do NOT change SUGGESTER_INSTRUCTION — it assembles the final prompt.
+"""
+from backend.spec_walker import WalkRules  # noqa: E402
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CUSTOMISE THIS — what the spec walker looks for
+# These rules are enforced by code, not the LLM. 100% reliable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+WALK_RULES = WalkRules(
+    description = True,   # Find missing or poor-quality descriptions
+    example     = True,   # Find missing examples
+    x_ai        = True,   # Find operations missing x-ai extension
+
+    # A description shorter than this is treated as poor quality
+    poor_description_min_length = 10,
+
+    # Descriptions matching any of these (case-insensitive) are treated as poor quality
+    poor_description_placeholders = {
+        "string", "integer", "number", "boolean", "object", "array",
+        "todo", "tbd", "n/a", "na", "none", "example", "description",
+        "placeholder", "fill me in", "...",
+    },
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CUSTOMISE THIS — how the LLM should generate values
+# The LLM only generates values for gaps already found by the walker.
+# It does NOT search the spec — the walker already did that.
+# ─────────────────────────────────────────────────────────────────────────────
+
+VALUE_RULES = """
+- `description`: one concise sentence starting with a verb (e.g. "Returns...", "Creates...", "Deletes..."). No filler.
+- `example`: a realistic, production-like value. Never use "string", "123", "example", or other placeholders.
+- `x-ai`: replace this line entirely with your company's actual x-ai structure and value. Example: {"enabled": true, "model": "gpt-4"}
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CUSTOMISE THIS — your company's enhancement standards
-# Each line is one rule the LLM will follow when reviewing the spec.
-# ─────────────────────────────────────────────────────────────────────────────
-
-ENHANCEMENT_RULES = """
-- `description` — suggest a concise one-sentence description for any operation, parameter, request body, response, or schema property that is missing one
-- `example` — suggest a realistic short example for any schema property, parameter, request body, or response that is missing one
-- `x-ai` — suggest this extension on every operation that does not already have it, using the value appropriate for your company (e.g. replace this rule entirely with your company's actual x-ai structure and value)
-"""
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CUSTOMISE THIS — what to cross-check when a Postman collection is provided
+# CUSTOMISE THIS — Postman cross-check rules
+# Only applied when a Postman collection is uploaded.
+# The LLM compares Postman request/response bodies against the spec's properties.
 # ─────────────────────────────────────────────────────────────────────────────
 
 POSTMAN_RULES = """
@@ -29,17 +55,15 @@ POSTMAN_RULES = """
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DO NOT CHANGE — OAS structural correctness rules and tool-call format
+# DO NOT CHANGE — tool-call format rules
 # ─────────────────────────────────────────────────────────────────────────────
 
 _FORMAT_RULES = """
-- Only suggest ADDING fields — never suggest changing or removing existing values
 - `example` on a parameter must go at `parameters.N.schema.example` — NOT at `parameters.N.example`
 - `example` on a schema property goes at the property level inside the schema
-- Do not suggest fields that already exist in the spec
 - Keep description values to one concise sentence
 - Keep example values short and realistic
-- NEVER suggest adding any field directly alongside a `$ref` — in OAS 3.0 all sibling properties of `$ref` are ignored and cause validation errors
+- NEVER suggest adding any field directly alongside a `$ref` — in OAS 3.0 all sibling properties of `$ref` are ignored
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -47,19 +71,25 @@ _FORMAT_RULES = """
 # ─────────────────────────────────────────────────────────────────────────────
 
 SUGGESTER_INSTRUCTION = f"""
-You are a senior API documentation engineer reviewing an OpenAPI Specification (OAS 3.x).
+You are a senior API documentation engineer.
 
-IMPORTANT: You must ALWAYS finish by calling the `submit_suggestions` tool. Never write a text response.
+You will be given:
+1. An OpenAPI Specification (YAML) for context.
+2. A list of GAPS — specific locations in the spec that are missing or have poor-quality values.
+   These gaps were found by a deterministic code scanner, not by you.
 
-## Enhancement rules
-For every operation, parameter, request body, response, and component schema:
-{ENHANCEMENT_RULES.strip()}
+Your ONLY job is to generate a good value for each gap.
+Do NOT search the spec for additional gaps — the list is complete.
+You MUST call `submit_suggestions` with one entry per gap. Do not skip any gap.
 
-## Postman rules (only applied when a Postman collection is provided)
-{POSTMAN_RULES.strip()}
+## Value quality rules
+{VALUE_RULES.strip()}
 
 ## Format rules
 {_FORMAT_RULES.strip()}
+
+## Postman rules (only applied when a Postman collection is provided)
+{POSTMAN_RULES.strip()}
 
 You MUST call `submit_suggestions`. Do NOT write any text outside of tool calls.
 """
