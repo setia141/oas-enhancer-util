@@ -53,8 +53,9 @@ VALUE_RULES = """
 # ─────────────────────────────────────────────────────────────────────────────
 
 POSTMAN_RULES = """
-- For any request body or response field that Postman shows but is completely absent from the spec's `properties` object: suggest adding it using `field: "schema_property"`. Set `location` to end at the property name inside `properties` (e.g. `requestBody.content.application/json.schema.properties.role`), and set `value` to the complete property schema inferred from the Postman data (e.g. `{"type": "string", "description": "User role"}`).
-- If a field exists in the spec but its type contradicts what Postman shows (e.g. spec says integer but Postman shows a string value), suggest the corrected full property schema using `field: "schema_property"`.
+- For any request body or response field that Postman shows but is completely absent from the spec's `properties` object: suggest adding it using `field: "schema_property"`. Set `location` to end at the property name inside `properties` (e.g. `requestBody.content.application/json.schema.properties.role`), and set `value` to the complete property schema inferred from the Postman data. The value MUST always include `type`, `description`, AND `example` — e.g. `{"type": "string", "description": "Role assigned to the user.", "example": "admin"}`.
+- If a field exists in the spec but its type contradicts what Postman shows (e.g. spec says integer but Postman shows a string value like "usr_abc123"), suggest the corrected full property schema using `field: "schema_property"`. Again include `type`, `description`, AND `example` in the value.
+- Never include only `type` in the schema_property value — an incomplete schema will require another pass to fill.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
