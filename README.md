@@ -183,7 +183,7 @@ oas-enhancer-util/
 │
 ├── backend/                      # FastAPI backend
 │   ├── server.py                 # /suggest (SSE), /apply, /health endpoints
-│   ├── loop_runner.py            # Walker → LLM pipeline, batching, heartbeat
+│   ├── pipeline.py            # Walker → LLM pipeline, batching, heartbeat
 │   ├── spec_walker.py            # ← Phase 1: deterministic gap finder
 │   ├── requirements.txt
 │   ├── .env.example
@@ -500,7 +500,7 @@ After each run, check the `logs/` directory:
 - `logs/gaps.log` — full list of gaps sent to the LLM
 - `logs/llm_calls.log` — raw LLM request and response payloads (DEBUG level)
 
-If a batch logs `possible output truncation`, reduce `BATCH_SIZE` or increase `BATCH_TOKENS` in `loop_runner.py`.
+If a batch logs `possible output truncation`, reduce `BATCH_SIZE` or increase `BATCH_TOKENS` in `pipeline.py`.
 
 ### Clearing the suggestion cache
 Delete the `.cache/` directory to force a fresh LLM run:
@@ -510,7 +510,7 @@ rm -rf .cache/
 The cache is automatically invalidated when `backend/agents/prompts.py` changes (rules update = new cache key). No manual clearing needed for rule changes.
 
 ### Tuning batch size for your model
-Edit `BATCH_SIZE` and `BATCH_TOKENS` at the top of `backend/loop_runner.py`:
+Edit `BATCH_SIZE` and `BATCH_TOKENS` at the top of `backend/pipeline.py`:
 
 | Model | BATCH_SIZE | BATCH_TOKENS |
 |---|---|---|

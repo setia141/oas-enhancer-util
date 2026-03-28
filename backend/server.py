@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 
 load_dotenv()
 
-from .loop_runner import init_client, get_suggestions  # noqa: E402
+from .pipeline import init_client, get_suggestions  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
