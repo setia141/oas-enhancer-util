@@ -47,20 +47,16 @@ _PROMPTS_FILE = os.path.join(os.path.dirname(__file__), "agents", "prompts.py")
 with open(_PROMPTS_FILE, "rb") as _f:
     _PROMPTS_HASH = hashlib.sha256(_f.read()).hexdigest()[:12]
 
-# ── Tunables ──────────────────────────────────────────────────────────────────
 SUGGESTER_TIMEOUT  = 300
 HEARTBEAT_INTERVAL = 5
-SUGGESTER_MODEL    = "gpt-4.1-mini"
+MAX_CONCURRENT     = 3
 
-# Tune these for your model's output token limit.
-# gpt-4.1-mini:    max_output=32k  → BATCH_SIZE=100,  BATCH_TOKENS=32768
-# gpt-5-mini/nano: max_output=128k → BATCH_SIZE=500,  BATCH_TOKENS=120000
-BATCH_SIZE   = 500
-BATCH_TOKENS = 120000
-MAX_CONCURRENT = 3   # fewer batches needed with larger size
-
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
+# All tunables are overridable via .env — see backend/.env.example
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL",  "https://api.openai.com/v1")
+OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY",   "")
+SUGGESTER_MODEL = os.environ.get("SUGGESTER_MODEL",  "gpt-4.1-mini")
+BATCH_TOKENS    = int(os.environ.get("BATCH_TOKENS", "32768"))
+BATCH_SIZE      = int(os.environ.get("BATCH_SIZE",   "100"))
 
 _client: httpx.AsyncClient | None = None
 
