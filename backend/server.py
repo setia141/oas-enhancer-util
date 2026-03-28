@@ -1,4 +1,5 @@
 """FastAPI server — suggestion-based OAS review."""
+import datetime
 import json
 import logging
 import warnings
@@ -18,6 +19,18 @@ load_dotenv()
 from .loop_runner import init_client, get_suggestions  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+
+class _SafeEncoder(json.JSONEncoder):
+    """Converts types that yaml.safe_load produces but json cannot handle."""
+    def default(self, obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def _dumps(obj) -> str:
+    return json.dumps(obj, cls=_SafeEncoder)
 
 
 @asynccontextmanager
@@ -151,9 +164,9 @@ async def suggest(
                 if event.get("type") == "done":
                     # Enrich suggestions with YAML context before sending
                     event["suggestions"] = _enrich_suggestions(event["spec"], event["suggestions"])
-                yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {_dumps(event)}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {_dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(
         event_stream(),
