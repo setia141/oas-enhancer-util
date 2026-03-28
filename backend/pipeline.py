@@ -94,7 +94,10 @@ def _load_cache(key: str) -> list[dict] | None:
         return None
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    logger.info("Cache hit — %d suggestion(s) (cached at %s)", len(data["suggestions"]), data["cached_at"])
+    logger.info(
+        "Cache hit — %d suggestion(s) cached at %s | file: %s | to invalidate: DELETE %s",
+        len(data["suggestions"]), data["cached_at"], os.path.basename(path), path,
+    )
     return data["suggestions"]
 
 
@@ -293,9 +296,10 @@ async def _run_suggester(oas_spec: dict, postman_text: str | None, has_postman: 
 # ── Public entry point ────────────────────────────────────────────────────────
 
 async def get_suggestions(
-    oas_spec:     dict,
-    postman_text: str | None,
-    has_postman:  bool,
+    oas_spec:      dict,
+    postman_text:  str | None,
+    has_postman:   bool,
+    force_refresh: bool = False,
 ) -> AsyncGenerator[dict, None]:
     if not _client:
         raise RuntimeError("HTTP client not initialised — call init_client() first")
@@ -307,11 +311,17 @@ async def get_suggestions(
     yield {"type": "start"}
 
     # Cache check
-    key    = _cache_key(oas_spec, postman_text if has_postman else None)
-    cached = _load_cache(key)
-    if cached is not None:
-        yield {"type": "done", "suggestions": cached, "spec": oas_spec, "original_yaml": _to_yaml(oas_spec), "from_cache": True}
-        return
+    key = _cache_key(oas_spec, postman_text if has_postman else None)
+    if force_refresh:
+        path = os.path.join(_CACHE_DIR, f"{key}.json")
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info("Cache invalidated — %s", os.path.basename(path))
+    else:
+        cached = _load_cache(key)
+        if cached is not None:
+            yield {"type": "done", "suggestions": cached, "spec": oas_spec, "original_yaml": _to_yaml(oas_spec), "from_cache": True}
+            return
 
     suggestions = None
     async for item in _await_with_heartbeat(_run_suggester(oas_spec, postman_text, has_postman), "suggester"):

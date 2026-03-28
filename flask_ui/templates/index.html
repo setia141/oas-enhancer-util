@@ -203,6 +203,9 @@
         <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#666;margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" id="force-refresh"> Force refresh (ignore cache)
+      </label>
       <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Get Suggestions</button>
     </div>
   </div>
@@ -367,6 +370,7 @@ async function handleSubmit() {
   const form = new FormData()
   form.append('oas_file', state.oasFile)
   if (state.postmanFile) form.append('postman_file', state.postmanFile)
+  if (document.getElementById('force-refresh').checked) form.append('force_refresh', 'true')
 
   try {
     const resp = await fetch('/suggest', { method:'POST', body:form })

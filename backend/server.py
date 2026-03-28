@@ -159,8 +159,9 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
 
 @app.post("/suggest")
 async def suggest(
-    oas_file: UploadFile = File(...),
-    postman_file: UploadFile = File(None),
+    oas_file:      UploadFile = File(...),
+    postman_file:  UploadFile = File(None),
+    force_refresh: bool       = False,
 ):
     """Streams SSE events: start → heartbeat* → done{suggestions, spec, original_yaml} | error"""
     try:
@@ -179,7 +180,7 @@ async def suggest(
 
     async def event_stream():
         try:
-            async for event in get_suggestions(oas_spec, postman_text, has_postman):
+            async for event in get_suggestions(oas_spec, postman_text, has_postman, force_refresh):
                 if event.get("type") == "done":
                     event["suggestions"] = _enrich_suggestions(event["spec"], event["suggestions"])
                     if not event["suggestions"]:
