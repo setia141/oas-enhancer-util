@@ -130,7 +130,16 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
     import copy
     enriched = []
     dropped  = 0
+    required_fields = {"method", "location", "field", "value"}
     for s in suggestions:
+        missing = required_fields - s.keys()
+        if missing or not s.get("location") or not s.get("method"):
+            logger.warning(
+                "Dropping malformed suggestion (missing/empty fields: %s): %s",
+                missing or "location/method empty", {k: s.get(k) for k in ("method", "path", "location", "field")},
+            )
+            dropped += 1
+            continue
         try:
             _apply_suggestion(copy.deepcopy(spec), s)
         except Exception as e:

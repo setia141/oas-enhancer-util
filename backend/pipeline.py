@@ -167,6 +167,8 @@ def _format_gaps(gaps: list[Gap]) -> str:
         "",
         f"Total: {len(gaps)} gaps.",
         "IMPORTANT: Submit ONLY the gaps listed above. Do NOT add suggestions for any other location.",
+        "Every suggestion MUST include path, method, location, field, and value — no field may be omitted.",
+        "For component gaps: method='component', path='', location=exactly as shown above (e.g. schemas.User.properties.email.description).",
     ]
     return "\n".join(lines)
 
