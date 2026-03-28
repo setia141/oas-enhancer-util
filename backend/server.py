@@ -131,7 +131,10 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
         try:
             _apply_suggestion(copy.deepcopy(spec), s)
         except Exception as e:
-            logger.warning("Dropping invalid suggestion %s → %s: %s", s.get("method"), s.get("location"), e)
+            logger.warning(
+                "Dropping invalid suggestion %s → %s: [%s] %s",
+                s.get("method"), s.get("location"), type(e).__name__, e,
+            )
             continue
         ctx = _get_yaml_context(spec, s)
         enriched.append({**s, "yaml_context": ctx})
