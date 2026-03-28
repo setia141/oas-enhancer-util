@@ -15,23 +15,13 @@ from backend.spec_walker import WalkRules  # noqa: E402
 # ─────────────────────────────────────────────────────────────────────────────
 
 WALK_RULES = WalkRules(
-    info_description = True,   # spec-level info.description
-    description      = True,   # all operation / parameter / schema descriptions
-    example          = True,   # all missing examples
-    x_ai             = True,   # x-ai tag + required sub-tags on every operation
+    info_description   = True,   # spec-level info.description
+    description        = True,   # all operation / parameter / schema descriptions
+    example            = True,   # all missing examples
+    x_ai               = True,   # x-ai tag + required sub-tags on every operation
 
     # Sub-tags that must be present inside every x-ai object
     x_ai_required_tags = ["when-to-use-me", "how-to-use-me", "trigger-me-command"],
-
-    # A description shorter than this is treated as poor quality
-    poor_description_min_length = 10,
-
-    # Descriptions matching any of these (case-insensitive) are treated as poor quality
-    poor_description_placeholders = {
-        "string", "integer", "number", "boolean", "object", "array",
-        "todo", "tbd", "n/a", "na", "none", "example", "description",
-        "placeholder", "fill me in", "...",
-    },
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
