@@ -35,10 +35,15 @@ def suggest():
         if f.filename:
             files["postman_file"] = (f.filename, f.read(), f.content_type or "application/octet-stream")
 
+    data = {}
+    if request.form.get("force_refresh") == "true":
+        data["force_refresh"] = "true"
+
     def generate():
         with requests.post(
             f"{BACKEND_URL}/suggest",
             files=files,
+            data=data,
             stream=True,
             timeout=600,
         ) as r:
