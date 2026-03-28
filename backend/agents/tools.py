@@ -13,50 +13,66 @@ SUGGESTER_TOOLS = [
                 "properties": {
                     "suggestions": {
                         "type": "array",
-                        "description": "List of suggested field additions. Each item targets one specific field.",
+                        "description": "List of suggested field additions or updates. Each item targets one specific field.",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "path": {
                                     "type": "string",
-                                    "description": "The API path, e.g. /users/{id}",
+                                    "description": "The API path, e.g. /users/{id}. Empty string for info-level or component suggestions.",
                                 },
                                 "method": {
                                     "type": "string",
-                                    "description": "HTTP method lowercase, e.g. get, post. Use 'component' for component schema suggestions.",
+                                    "description": (
+                                        "HTTP method lowercase (get, post, put, patch, delete). "
+                                        "Use 'component' for component schema suggestions. "
+                                        "Use 'info' for spec-level info.description."
+                                    ),
                                 },
                                 "location": {
                                     "type": "string",
                                     "description": (
-                                        "Dot-notation location of the field within the operation or component. Examples: "
-                                        "'description' for the operation description, "
-                                        "'parameters.0.description' for first parameter, "
-                                        "'parameters.0.schema.example' for first parameter example, "
-                                        "'requestBody.description' for request body description, "
-                                        "'requestBody.content.application/json.schema.example' for request body example, "
-                                        "'responses.200.description' for response description, "
-                                        "'responses.200.content.application/json.schema.example' for response example, "
-                                        "'x-ai' for the x-ai extension field. "
-                                        "For components: 'schemas.MySchema.description' or 'schemas.MySchema.properties.fieldName.description'. "
-                                        "For adding a missing property from Postman: location must point to the property name inside properties, "
-                                        "e.g. 'requestBody.content.application/json.schema.properties.role' or "
-                                        "'responses.201.content.application/json.schema.properties.createdAt'."
+                                        "Dot-notation path to the field within the root object. Examples: "
+                                        "'description' — operation or info-level description; "
+                                        "'parameters.0.description' — first parameter description; "
+                                        "'parameters.0.schema.example' — first parameter example; "
+                                        "'requestBody.description' — request body description; "
+                                        "'requestBody.content.application/json.schema.example' — request body example; "
+                                        "'requestBody.content.application/json.schema.required' — required fields array; "
+                                        "'responses.200.description' — response description; "
+                                        "'responses.400' — full error response object (Postman rule 2); "
+                                        "'responses.200.content.application/json.schema.example' — response example; "
+                                        "'x-ai' — full x-ai object (all sub-tags, when x-ai is missing entirely); "
+                                        "'x-ai.when-to-use-me' — single x-ai sub-tag; "
+                                        "'x-ai.how-to-use-me' — single x-ai sub-tag; "
+                                        "'x-ai.trigger-me-command' — single x-ai sub-tag; "
+                                        "'schemas.MySchema.description' — component schema description; "
+                                        "'schemas.MySchema.properties.fieldName.description' — component property description. "
+                                        "For Postman missing property: location ends at property name inside properties, "
+                                        "e.g. 'requestBody.content.application/json.schema.properties.role'."
                                     ),
                                 },
                                 "field": {
                                     "type": "string",
                                     "enum": ["description", "example", "x-ai", "schema_property"],
                                     "description": (
-                                        "The type of field being suggested. Use 'schema_property' ONLY when Postman shows "
-                                        "a request body or response field that is completely missing from the spec's properties object. "
-                                        "For schema_property, location must end at the property name (not .description or .example), "
-                                        "and value must be the complete property schema object e.g. {\"type\": \"string\", \"description\": \"...\"}."
+                                        "'description' — text description field. "
+                                        "'example' — example value field. "
+                                        "'x-ai' — x-ai extension field or sub-tag (when-to-use-me / how-to-use-me / trigger-me-command). "
+                                        "'schema_property' — used for Postman findings: missing properties, "
+                                        "type corrections, error response schemas, required arrays. "
+                                        "For schema_property the value must be a complete object."
                                     ),
                                 },
                                 "value": {
                                     "description": (
-                                        "The suggested value. String for description, any valid JSON value for example or x-ai, "
-                                        "a complete schema object e.g. {\"type\": \"string\", \"description\": \"...\"} for schema_property."
+                                        "The suggested value. "
+                                        "String for description or x-ai sub-tags. "
+                                        "Any valid JSON value for example. "
+                                        "Complete x-ai object {when-to-use-me, how-to-use-me, trigger-me-command} when location is 'x-ai'. "
+                                        "Complete schema object {type, description, example} for schema_property. "
+                                        "Complete response object {description, content} for error response schema_property. "
+                                        "Full array [field1, field2] for required array schema_property."
                                     ),
                                 },
                                 "reason": {

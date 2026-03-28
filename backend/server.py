@@ -79,6 +79,8 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
             schema_name = parts_loc[1] if len(parts_loc) > 1 else None  # e.g. "User"
             section_dict = spec.get("components", {}).get(section, {})
             root = section_dict.get(schema_name, {}) if schema_name else section_dict
+        elif method == "info":
+            root = spec.get("info", {})
         else:
             # Show the full operation object for context
             root = spec.get("paths", {}).get(path, {}).get(method, {})
@@ -224,6 +226,10 @@ def _apply_suggestion(spec: dict, suggestion: dict) -> None:
 
     if method == "component":
         root = spec.get("components", {})
+    elif method == "info":
+        root = spec.get("info")
+        if not root:
+            raise ValueError("spec has no 'info' section")
     else:
         root = spec.get("paths", {}).get(path, {}).get(method, {})
         if not root:

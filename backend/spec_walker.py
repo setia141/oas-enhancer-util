@@ -14,15 +14,23 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Configuration — import and override in loop_runner / prompts
+# Configuration — import and override in prompts.py
 # ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class WalkRules:
     # Which field types to look for
-    description: bool = True
-    example:     bool = True
-    x_ai:        bool = True
+    description:      bool = True
+    example:          bool = True
+    x_ai:             bool = True
+    info_description: bool = True   # spec-level info.description
+
+    # Required sub-tags inside every x-ai object
+    x_ai_required_tags: list = field(default_factory=lambda: [
+        "when-to-use-me",
+        "how-to-use-me",
+        "trigger-me-command",
+    ])
 
     # A description is considered "poor" (needs improvement) if:
     poor_description_min_length: int = 10
@@ -39,9 +47,9 @@ class WalkRules:
 
 @dataclass
 class Gap:
-    path:      str   # API path, e.g. /users/{id}  (empty for components)
-    method:    str   # HTTP method lowercase, or "component"
-    location:  str   # dot-notation within the operation/component
+    path:      str   # API path, e.g. /users/{id}  (empty for info/components)
+    method:    str   # HTTP method lowercase, "component", or "info"
+    location:  str   # dot-notation within the root object
     field:     str   # "description" | "example" | "x-ai"
     is_update: bool = False  # True when field exists but is poor quality
 
@@ -69,9 +77,9 @@ def _has_ref(obj) -> bool:
 
 
 def _gap(path, method, location, field, is_update=False) -> Gap:
-    """Create a Gap and log it at DEBUG level."""
     action = "UPDATE" if is_update else "NEW"
-    logger.debug("  GAP [%s] %s %s → %s (%s)", action, method.upper(), path or location, location, field)
+    label  = f"{method.upper()} {path}" if path else method.upper()
+    logger.debug("  GAP [%s] %s → %s (%s)", action, label, location, field)
     return Gap(path, method, location, field, is_update=is_update)
 
 
@@ -104,12 +112,38 @@ def _walk_schema_properties(
                 gaps.append(_gap(path, method, f"{base}.description", "description",
                                  is_update=existing is not None))
             else:
-                logger.debug("    OK  description at %s.description = %r", base, existing)
+                logger.debug("    OK  description at %s = %r", base, existing)
         if rules.example:
             if "example" not in prop_schema:
                 gaps.append(_gap(path, method, f"{base}.example", "example"))
             else:
-                logger.debug("    OK  example at %s.example", base)
+                logger.debug("    OK  example at %s", base)
+
+
+def _check_x_ai(path: str, method: str, operation: dict, rules: WalkRules, gaps: list[Gap]) -> None:
+    """Check x-ai presence and all required sub-tags."""
+    xai = operation.get("x-ai")
+
+    if xai is None:
+        # Entire x-ai object missing — one gap for the whole thing
+        logger.debug("  GAP [NEW] %s %s → x-ai (x-ai — entire object missing)", method.upper(), path)
+        gaps.append(Gap(path, method, "x-ai", "x-ai"))
+        return
+
+    if not isinstance(xai, dict):
+        logger.debug("  SKIP x-ai at %s %s — not a dict, cannot inspect sub-tags", method.upper(), path)
+        return
+
+    # x-ai exists — check each required sub-tag
+    for tag in rules.x_ai_required_tags:
+        existing = xai.get(tag)
+        if existing is None:
+            gaps.append(_gap(path, method, f"x-ai.{tag}", "x-ai"))
+        elif tag == "trigger-me-command" and _poor_description(existing, rules):
+            # trigger-me-command must be meaningful, not a placeholder
+            gaps.append(_gap(path, method, f"x-ai.{tag}", "x-ai", is_update=True))
+        else:
+            logger.debug("  OK  x-ai.%s = %r", tag, existing)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -119,17 +153,28 @@ def _walk_schema_properties(
 def walk(spec: dict, rules: WalkRules) -> list[Gap]:
     """
     Walk the OAS spec and return every Gap that needs a value.
-    Gaps are returned in spec order (paths, then components).
+    Gaps are returned in spec order (info, then paths, then components).
     """
     gaps: list[Gap] = []
 
     paths      = spec.get("paths", {})
     components = spec.get("components", {}).get("schemas", {})
     logger.info(
-        "Walker starting — %d path(s), %d component schema(s), rules: description=%s example=%s x_ai=%s",
+        "Walker starting — %d path(s), %d component schema(s), "
+        "rules: info_description=%s description=%s example=%s x_ai=%s x_ai_tags=%s",
         len(paths), len(components),
-        rules.description, rules.example, rules.x_ai,
+        rules.info_description, rules.description, rules.example, rules.x_ai,
+        rules.x_ai_required_tags,
     )
+
+    # ── spec info.description ─────────────────────────────────────────────────
+    if rules.info_description:
+        existing = spec.get("info", {}).get("description")
+        if _poor_description(existing, rules):
+            logger.debug("Checking info.description")
+            gaps.append(_gap("", "info", "description", "description", is_update=existing is not None))
+        else:
+            logger.debug("OK  info.description = %r", existing)
 
     # ── Paths ────────────────────────────────────────────────────────────────
     for path, path_item in paths.items():
@@ -154,12 +199,9 @@ def walk(spec: dict, rules: WalkRules) -> list[Gap]:
                 else:
                     logger.debug("  OK  operation description = %r", existing)
 
-            # x-ai extension
+            # x-ai (full object + required sub-tags)
             if rules.x_ai:
-                if "x-ai" not in operation:
-                    gaps.append(_gap(path, method, "x-ai", "x-ai"))
-                else:
-                    logger.debug("  OK  x-ai already present")
+                _check_x_ai(path, method, operation, rules, gaps)
 
             # Parameters
             params = operation.get("parameters", [])

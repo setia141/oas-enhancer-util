@@ -2,23 +2,26 @@
 OAS Enhancer prompts.
 
 How to customise:
-  - Change WALK_RULES to control what the code scanner looks for and what
-    counts as "poor quality". No LLM involved here.
-  - Change VALUE_RULES to tell the LLM how to generate good values.
-  - Change POSTMAN_RULES to control what Postman cross-checking does.
+  - WALK_RULES   — what the code scanner looks for (deterministic, no LLM).
+  - VALUE_RULES  — how the LLM generates values for gaps found by the walker.
+  - POSTMAN_RULES — what the LLM cross-checks when a Postman collection is provided.
   - Do NOT change SUGGESTER_INSTRUCTION — it assembles the final prompt.
 """
 from backend.spec_walker import WalkRules  # noqa: E402
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMISE THIS — what the spec walker looks for
-# These rules are enforced by code, not the LLM. 100% reliable.
+# Enforced by code, not the LLM. 100% reliable.
 # ─────────────────────────────────────────────────────────────────────────────
 
 WALK_RULES = WalkRules(
-    description = True,   # Find missing or poor-quality descriptions
-    example     = True,   # Find missing examples
-    x_ai        = True,   # Find operations missing x-ai extension
+    info_description = True,   # spec-level info.description
+    description      = True,   # all operation / parameter / schema descriptions
+    example          = True,   # all missing examples
+    x_ai             = True,   # x-ai tag + required sub-tags on every operation
+
+    # Sub-tags that must be present inside every x-ai object
+    x_ai_required_tags = ["when-to-use-me", "how-to-use-me", "trigger-me-command"],
 
     # A description shorter than this is treated as poor quality
     poor_description_min_length = 10,
@@ -33,29 +36,68 @@ WALK_RULES = WalkRules(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMISE THIS — how the LLM should generate values
-# The LLM only generates values for gaps already found by the walker.
-# It does NOT search the spec — the walker already did that.
-#
-# For x-ai: replace the value below with your company's actual x-ai structure.
-# Whatever you write here is what the LLM will use as the value for every x-ai gap.
 # ─────────────────────────────────────────────────────────────────────────────
 
 VALUE_RULES = """
-- `description`: one concise sentence starting with a verb (e.g. "Returns...", "Creates...", "Deletes..."). No filler.
-- `example`: a realistic, production-like value. Never use "string", "123", "example", or other placeholders.
-- `x-ai`: use the value {"enabled": true, "model": "gpt-4"}
+### description
+- One concise sentence starting with a verb ("Returns...", "Creates...", "Deletes...").
+- For info.description: outline the overall business purpose of the API in 1-2 sentences.
+- For request/response schemas: be specific about what the field means in the business context.
+- No filler words. No generic sentences like "This is the description of...".
+
+### example
+- Must be a realistic, production-like value. Never use "string", "123", "example", or placeholders.
+- Dates: use ISO 8601 format (e.g. "2024-01-15T10:30:00Z").
+- IDs: use realistic prefixed formats (e.g. "usr_abc123", "ord_xyz789") unless spec implies integer.
+- Emails: use realistic domains (e.g. "john.doe@company.com").
+
+### x-ai (when location is `x-ai` — full object missing)
+Generate the complete x-ai object with all three sub-tags:
+{
+  "when-to-use-me": "<one sentence describing the business scenario that triggers this endpoint>",
+  "how-to-use-me": "<one sentence on required inputs, auth, and expected output>",
+  "trigger-me-command": "<a realistic slash command or CLI trigger, e.g. /create-user email=john@company.com role=admin>"
+}
+
+### x-ai (when location is `x-ai.when-to-use-me`, `x-ai.how-to-use-me`, or `x-ai.trigger-me-command`)
+Generate only the string value for that specific sub-tag.
+- `when-to-use-me`: one sentence, business scenario (e.g. "Use when onboarding a new team member who needs system access.")
+- `how-to-use-me`: one sentence, inputs and output (e.g. "Send email and role in the request body; returns the created user with an ID.")
+- `trigger-me-command`: a meaningful slash command with realistic parameter names, not a placeholder
+  (e.g. "/create-user email=<email> role=<role>")
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOMISE THIS — Postman cross-check rules
 # Only applied when a Postman collection is uploaded.
-# The LLM compares Postman request/response bodies against the spec's properties.
 # ─────────────────────────────────────────────────────────────────────────────
 
 POSTMAN_RULES = """
-- For any request body or response field that Postman shows but is completely absent from the spec's `properties` object: suggest adding it using `field: "schema_property"`. Set `location` to end at the property name inside `properties` (e.g. `requestBody.content.application/json.schema.properties.role`), and set `value` to the complete property schema inferred from the Postman data. The value MUST always include `type`, `description`, AND `example` — e.g. `{"type": "string", "description": "Role assigned to the user.", "example": "admin"}`.
-- If a field exists in the spec but its type contradicts what Postman shows (e.g. spec says integer but Postman shows a string value like "usr_abc123"), suggest the corrected full property schema using `field: "schema_property"`. Again include `type`, `description`, AND `example` in the value.
-- Never include only `type` in the schema_property value — an incomplete schema will require another pass to fill.
+Cross-check the Postman collection against the OAS spec and apply the following rules:
+
+1. NAMING INCONSISTENCIES — If a field in Postman uses a different naming convention than the OAS spec
+   (e.g. Postman uses camelCase `userId` but OAS uses snake_case `user_id`), use `field: "schema_property"`
+   to add the Postman-named version at the correct `properties` location.
+
+2. ERROR CODES — If Postman shows a response with a status code (e.g. 400, 404, 422, 500) that is completely
+   absent from the OAS `responses` object for that operation, add it using `field: "schema_property"` at
+   location `responses.{code}`, with value being a complete response object:
+   {"description": "<meaningful error description>", "content": {"application/json": {"schema": {"type": "object",
+   "properties": {"error": {"type": "string", "description": "Error message.", "example": "Resource not found."}}}}}}
+
+3. MISSING PROPERTIES — For any field present in Postman request body or response that is absent from the
+   spec's `properties`, add it using `field: "schema_property"`. The value MUST include `type`, `description`,
+   AND `example` — e.g. {"type": "string", "description": "Role assigned to the user.", "example": "admin"}.
+   Never include only `type`. An incomplete schema causes re-run gaps.
+
+4. REQUIRED FIELDS — If Postman always sends a field in the request body, and it is not in the schema's
+   `required` array, suggest the updated required array using `field: "schema_property"` at location
+   `requestBody.content.application/json.schema.required`, with value being the complete updated array
+   e.g. ["email", "password", "role"].
+
+5. TYPE CORRECTIONS — If a field's type in the spec contradicts what Postman shows (e.g. spec says integer
+   but Postman shows a string like "usr_abc123"), suggest the corrected full schema using `field: "schema_property"`
+   with the correct `type`, `description`, AND `example`.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -65,9 +107,10 @@ POSTMAN_RULES = """
 _FORMAT_RULES = """
 - `example` on a parameter must go at `parameters.N.schema.example` — NOT at `parameters.N.example`
 - `example` on a schema property goes at the property level inside the schema
-- Keep description values to one concise sentence
-- Keep example values short and realistic
 - NEVER suggest adding any field directly alongside a `$ref` — in OAS 3.0 all sibling properties of `$ref` are ignored
+- For `x-ai` sub-tags: only navigate into `x-ai.<tag>` if `x-ai` already exists as a dict.
+  If `x-ai` is missing entirely, the gap location will be `x-ai` — submit the complete object as value.
+- For `info.description`: method is "info", location is "description".
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
