@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Pydantic serial
 
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -161,7 +161,7 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
 async def suggest(
     oas_file:      UploadFile = File(...),
     postman_file:  UploadFile = File(None),
-    force_refresh: str        = "",
+    force_refresh: str        = Form(""),
 ):
     """Streams SSE events: start → heartbeat* → done{suggestions, spec, original_yaml} | error"""
     try:
