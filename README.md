@@ -9,11 +9,14 @@ An AI-powered web tool that reviews your OpenAPI Specification and suggests impr
 - [How it works](#how-it-works)
 - [Solution diagram](#solution-diagram)
 - [Why this design](#why-this-design)
+- [LLM calls explained](#llm-calls-explained)
+- [Caching](#caching)
 - [Architecture](#architecture)
 - [Project structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Local setup](#local-setup)
 - [Docker setup](#docker-setup)
+- [Helm / Kubernetes setup](#helm--kubernetes-setup)
 - [Environment variables](#environment-variables)
 - [Customising rules](#customising-rules)
 - [Using a Postman collection](#using-a-postman-collection)
@@ -26,10 +29,11 @@ An AI-powered web tool that reviews your OpenAPI Specification and suggests impr
 
 1. Upload an OAS 3.x file (JSON or YAML). Optionally upload a Postman collection.
 2. **Phase 1 — Spec Walker** scans the spec deterministically, producing a precise list of every missing field (descriptions, examples, x-ai sub-tags, info description). Walks into `allOf` / `anyOf` / `oneOf` branches and nested object properties.
-3. **Phase 2 — LLM** receives the gap list in batches of 100. Each batch gets only the spec sections relevant to its gaps as context. Batches run concurrently (up to 5 at a time). If a Postman collection is provided, the LLM also finds schema differences in a separate call.
-4. You see every suggestion with its location in the spec. Click **Accept**, **Edit**, or **Reject** for each one.
-5. Click **Apply** — only accepted suggestions are written to the spec.
-6. A diff view shows exactly what changed. Download the enhanced YAML.
+3. **Phase 2 — LLM batches** receive the gap list in batches of 100. Each batch gets only the spec sections relevant to its gaps as context. Batches run concurrently (up to 3 at a time). If a Postman collection is provided, a **separate LLM call** cross-checks schema differences.
+4. Suggestions are pre-validated server-side before being shown. Any that would fail to apply (e.g. `$ref` sibling violations) are silently dropped.
+5. You see every suggestion with its location in the spec. Click **Accept**, **Edit**, or **Reject** for each one.
+6. Click **Apply** — only accepted suggestions are written to the spec.
+7. A diff view shows exactly what changed. Download the enhanced YAML.
 
 If you change your mind after applying, click **← Back to Review** to adjust and re-apply without re-running the AI.
 
@@ -74,30 +78,35 @@ Your review progress is auto-saved in the browser. If you close the tab mid-revi
                   (precise locations)             │
                        │                          │
           ┌────────────▼────────────┐             │
-          │   PHASE 2 — LLM BATCHES │             │
-          │   (gpt-4.1-mini)        │             │
+          │   PHASE 2 — LLM CALL 1  │             │
+          │   Gap filler            │             │
           │                         │             │
           │  Gaps split into        │             │
           │  batches of 100.        │             │
-          │  Each batch gets only   │             │
-          │  its relevant spec      │             │
-          │  sections as context.   │             │
-          │  Up to 5 run in         │             │
+          │  Each batch sends:      │             │
+          │  • System: rules prompt │             │
+          │  • User: relevant spec  │             │
+          │    sections only (not   │             │
+          │    full spec) + gap list│             │
+          │  Up to 3 run in         │             │
           │  parallel.              │             │
           │                         │             │
-          │  Generates values for   │             │
-          │  every gap — no         │             │
-          │  searching, gaps are    │             │
-          │  already known.         │             │
+          │  Fills: description,    │             │
+          │  example, x-ai fields   │             │
           └────────────┬────────────┘             │
                        │                          │
                        │            ┌─────────────▼──────────────┐
-                       │            │  POSTMAN ANALYSIS           │
-                       │            │  (separate single LLM call) │
+                       │            │  PHASE 2 — LLM CALL 2       │
+                       │            │  Postman analyser           │
+                       │            │  (only when collection      │
+                       │            │   is uploaded)              │
                        │            │                             │
-                       │            │  Full spec + collection     │
-                       │            │  sent together.             │
+                       │            │  Sends:                     │
+                       │            │  • System: rules prompt     │
+                       │            │  • User: full spec YAML     │
+                       │            │    + full Postman collection │
                        │            │                             │
+                       │            │  Finds:                     │
                        │            │  • Naming inconsistencies   │
                        │            │  • Missing properties       │
                        │            │  • Type corrections         │
@@ -112,6 +121,7 @@ Your review progress is auto-saved in the browser. If you close the tab mid-revi
           │  Drops any that would fail to apply:           │
           │  • $ref sibling violations (OAS 3.0 rule)      │
           │  • Navigation path not found                   │
+          │  • Missing required fields                     │
           └────────────────────────┬───────────────────────┘
                                    │
           ┌────────────────────────▼───────────────────────┐
@@ -144,8 +154,8 @@ This tool separates the two jobs:
 | Job | Owner | Why |
 |---|---|---|
 | **Finding** missing fields | Spec Walker (code) | Deterministic, 100% reliable, free |
-| **Generating** quality values | LLM | What LLMs are actually good at |
-| **Catching** schema inconsistencies | LLM + Postman | Requires semantic reasoning |
+| **Generating** quality values | LLM Call 1 (batches) | What LLMs are actually good at |
+| **Catching** schema inconsistencies | LLM Call 2 (Postman) | Requires semantic reasoning |
 | **Reviewing** quality of output | Human | The only reliable quality judge |
 
 **Result:**
@@ -153,6 +163,59 @@ This tool separates the two jobs:
 - Each LLM batch is focused: "here are 100 specific locations and their spec context — generate a value for each"
 - Context sent per batch is only the operations/schemas relevant to that batch, not the whole spec
 - Quality is enforced at generation time (VALUE_RULES) and review time (human accepts/edits/rejects)
+
+---
+
+## LLM calls explained
+
+The pipeline makes **up to 2 LLM calls per run** (1 if no Postman collection is uploaded).
+
+### Call 1 — Gap filler (always runs if walker finds gaps)
+
+| | Content |
+|---|---|
+| **System prompt** | `SUGGESTER_INSTRUCTION` — rules for writing descriptions, examples, x-ai values |
+| **User message** | Only the spec sections relevant to this batch (e.g. `GET /users` YAML if that batch has gaps in that operation) + the numbered gap list with exact locations and fields |
+| **Tool** | `submit_suggestions` — structured output, one entry per gap |
+| **Why scoped context?** | Keeps token usage low and reduces hallucination. The LLM does not see the full spec — only the operations it needs to fill. |
+
+If there are more than `BATCH_SIZE` gaps, they are split into multiple batches which run concurrently (up to `MAX_CONCURRENT=3`).
+
+### Call 2 — Postman analyser (only when a collection is uploaded)
+
+| | Content |
+|---|---|
+| **System prompt** | `SUGGESTER_INSTRUCTION` — same rules prompt |
+| **User message** | Full spec as YAML + full Postman collection text |
+| **Tool** | `submit_suggestions` — same structured output format |
+| **Why full spec?** | Postman comparison requires cross-referencing request/response bodies against the entire spec — it is not scoped to specific operations. |
+
+Both calls produce suggestions in the same format and go through the same pre-validation step before being shown in the UI.
+
+---
+
+## Caching
+
+Suggestions are cached in `.cache/` to avoid re-running the LLM on the same spec.
+
+**Cache key** = SHA256 of:
+- Canonical YAML of the spec (sorted keys, so JSON vs YAML upload gives the same key)
+- Postman collection text (if provided)
+- Hash of `backend/agents/prompts.py`
+
+**Automatic invalidation**: When you edit `prompts.py` (change rules), the prompts hash changes and the cache is automatically busted — no manual deletion needed.
+
+**Force refresh**: Tick the **Force refresh (ignore cache)** checkbox before uploading to delete the cache entry and re-run the LLM even if results are cached.
+
+**Manual clearing**:
+```bash
+rm -rf .cache/
+```
+
+The cache file path is logged on every cache hit so you can delete a single entry if needed:
+```
+Cache hit — 51 suggestion(s) cached at 2026-03-28T… | file: abc123.json | to invalidate: DELETE /app/.cache/abc123.json
+```
 
 ---
 
@@ -183,10 +246,11 @@ oas-enhancer-util/
 │
 ├── backend/                      # FastAPI backend
 │   ├── server.py                 # /suggest (SSE), /apply, /health endpoints
-│   ├── pipeline.py            # Walker → LLM pipeline, batching, heartbeat
-│   ├── spec_walker.py            # ← Phase 1: deterministic gap finder
+│   ├── pipeline.py               # Walker → LLM pipeline, batching, caching, heartbeat
+│   ├── spec_walker.py            # Phase 1: deterministic gap finder
 │   ├── requirements.txt
 │   ├── .env.example
+│   ├── Dockerfile
 │   └── agents/
 │       ├── prompts.py            # ← EDIT THIS — all customisable rules
 │       └── tools.py              # OpenAI function schema for submit_suggestions
@@ -195,8 +259,24 @@ oas-enhancer-util/
 │   ├── app.py                    # Flask routes + proxy
 │   ├── requirements.txt
 │   ├── .env.example
+│   ├── Dockerfile
 │   └── templates/
+│       ├── home.html             # Tool home page
 │       └── index.html            # Single-page review UI
+│
+├── helm/                         # Helm chart for Kubernetes deployment
+│   └── oas-enhancer/
+│       ├── Chart.yaml
+│       ├── values.yaml           # All tunables — registry, images, resources, ingress
+│       └── templates/
+│           ├── _helpers.tpl
+│           ├── secret.yaml       # OPENAI_API_KEY
+│           ├── backend-pvc.yaml  # Persistent volumes for logs + cache
+│           ├── backend-deployment.yaml
+│           ├── backend-service.yaml
+│           ├── ui-deployment.yaml
+│           ├── ui-service.yaml
+│           └── ingress.yaml
 │
 ├── logs/                         # Runtime logs (git-ignored)
 │   ├── gaps.log                  # Gap list written before each LLM run
@@ -218,7 +298,7 @@ oas-enhancer-util/
 | Requirement | Version |
 |---|---|
 | Python | 3.11+ |
-| OpenAI API key | Access to `gpt-4.1-mini` |
+| OpenAI API key | Access to `gpt-4.1-mini` (or any model set in `SUGGESTER_MODEL`) |
 
 ---
 
@@ -234,7 +314,7 @@ venv\Scripts\activate           # Windows
 
 pip install -r backend/requirements.txt
 cp backend/.env.example backend/.env
-# Edit backend/.env and set OPENAI_API_KEY
+# Edit backend/.env — set OPENAI_API_KEY at minimum
 ```
 
 Start the backend:
@@ -247,14 +327,9 @@ uvicorn backend.server:app --reload --port 8000
 Open a **new terminal**:
 
 ```bash
-cd flask_ui
-python -m venv venv
-source venv/bin/activate        # macOS / Linux
-venv\Scripts\activate           # Windows
-
-pip install -r requirements.txt
-cp .env.example .env
-python app.py
+pip install -r flask_ui/requirements.txt
+cp flask_ui/.env.example flask_ui/.env
+python flask_ui/app.py
 ```
 
 Open **http://localhost:3000/oas-enhancer** in your browser.
@@ -267,11 +342,70 @@ Open **http://localhost:3000/oas-enhancer** in your browser.
 cp backend/.env.example backend/.env
 # Set OPENAI_API_KEY in backend/.env
 
-docker-compose up --build
+docker compose up --build
 ```
 
 - Frontend: http://localhost:3000
 - Backend:  http://localhost:8000
+
+Logs and cache are persisted in named Docker volumes (`backend_logs`, `backend_cache`) so they survive container restarts. The UI waits for the backend healthcheck to pass before starting.
+
+---
+
+## Helm / Kubernetes setup
+
+### 1. Build and push images
+
+```bash
+docker build -f backend/Dockerfile  -t your-registry/oas-enhancer-backend:latest .
+docker build -f flask_ui/Dockerfile -t your-registry/oas-enhancer-ui:latest .
+docker push your-registry/oas-enhancer-backend:latest
+docker push your-registry/oas-enhancer-ui:latest
+```
+
+### 2. Install the chart
+
+```bash
+helm install oas-enhancer ./helm/oas-enhancer \
+  --namespace oas-enhancer --create-namespace \
+  --set registry=your-registry \
+  --set backend.openaiApiKey=sk-...
+```
+
+Or use an existing Kubernetes secret that already holds `OPENAI_API_KEY`:
+
+```bash
+helm install oas-enhancer ./helm/oas-enhancer \
+  --namespace oas-enhancer --create-namespace \
+  --set registry=your-registry \
+  --set backend.existingSecret=my-openai-secret
+```
+
+### 3. Enable ingress (optional)
+
+```bash
+helm upgrade oas-enhancer ./helm/oas-enhancer \
+  --set ingress.enabled=true \
+  --set ingress.className=nginx \
+  --set ingress.host=oas-enhancer.your-domain.com
+```
+
+### Key values
+
+| Value | Default | Description |
+|---|---|---|
+| `registry` | `""` | Docker registry prefix, e.g. `ghcr.io/your-org` |
+| `backend.image` | `oas-enhancer-backend` | Backend image name |
+| `backend.tag` | `latest` | Backend image tag |
+| `backend.openaiApiKey` | `""` | API key (creates a Secret) |
+| `backend.existingSecret` | `""` | Use a pre-existing Secret instead |
+| `backend.env.SUGGESTER_MODEL` | `gpt-4.1-mini` | Model name |
+| `backend.env.BATCH_TOKENS` | `32768` | Max output tokens per batch |
+| `backend.env.BATCH_SIZE` | `100` | Gaps per LLM batch |
+| `backend.persistence.logs.size` | `1Gi` | PVC size for logs |
+| `backend.persistence.cache.size` | `2Gi` | PVC size for suggestion cache |
+| `ingress.enabled` | `false` | Enable Ingress resource |
+| `ingress.host` | `oas-enhancer.example.com` | Ingress hostname |
 
 ---
 
@@ -282,7 +416,18 @@ docker-compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OPENAI_API_KEY` | Yes | — | OpenAI API key |
-| `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | Override for Azure OpenAI or a proxy |
+| `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | Override for Azure OpenAI or a corporate AI gateway |
+| `SUGGESTER_MODEL` | No | `gpt-4.1-mini` | Model used for both LLM calls |
+| `BATCH_SIZE` | No | `100` | Number of gaps per LLM batch (Call 1) |
+| `BATCH_TOKENS` | No | `32768` | Max output tokens per batch — must not exceed your model's output limit |
+
+**Model tuning guide:**
+
+| Model | `SUGGESTER_MODEL` | `BATCH_TOKENS` | `BATCH_SIZE` |
+|---|---|---|---|
+| gpt-4.1-mini | `gpt-4.1-mini` | `32768` | `100` |
+| gpt-5-mini | `gpt-5-mini` | `120000` | `500` |
+| gpt-5-nano | `gpt-5-nano` | `120000` | `500` |
 
 ### Frontend — `flask_ui/.env`
 
@@ -296,6 +441,8 @@ docker-compose up --build
 ## Customising rules
 
 All rules live in **`backend/agents/prompts.py`**. There are three sections to edit.
+
+> Editing `prompts.py` automatically busts the suggestion cache — no manual cache clearing needed.
 
 ---
 
@@ -328,7 +475,7 @@ x_ai_required_tags = ["intent", "trigger-command", "owner-team"]
 
 ### `VALUE_RULES` — how the LLM generates values
 
-Controls **quality of generated content** (Phase 2). The LLM follows these rules when writing values for every gap the walker found. This is where you encode your company's documentation standards.
+Controls **quality of generated content** (Phase 2, LLM Call 1). The LLM follows these rules when writing values for every gap the walker found. This is where you encode your company's documentation standards.
 
 Current rules (edit to match your standards):
 
@@ -351,7 +498,7 @@ x-ai         — complete object with:
 
 ### `POSTMAN_RULES` — what to cross-check from Postman
 
-Controls **Postman-driven corrections** (Phase 2, only when a collection is uploaded). Five rules are applied:
+Controls **Postman-driven corrections** (Phase 2, LLM Call 2 — only when a collection is uploaded). Five rules are applied:
 
 | Rule | What it does |
 |---|---|
@@ -383,10 +530,11 @@ Test files are included in the repo:
 
 **Request** — `multipart/form-data`
 
-| Field | Type | Required |
-|---|---|---|
-| `oas_file` | file | Yes — OAS 3.x `.json`, `.yaml`, or `.yml` |
-| `postman_file` | file | No — Postman Collection v2.1 `.json` |
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `oas_file` | file | Yes | OAS 3.x `.json`, `.yaml`, or `.yml` |
+| `postman_file` | file | No | Postman Collection v2.1 `.json` |
+| `force_refresh` | string | No | Send `"true"` to bypass cache and re-run the LLM |
 
 **Response** — `text/event-stream` (SSE)
 
@@ -396,7 +544,7 @@ Each event: `data: <json>\n\n`
 |---|---|
 | `start` | `{}` — analysis has begun |
 | `heartbeat` | `{}` — keepalive every 5s, safe to ignore |
-| `done` | `{ suggestions[], spec, original_yaml }` |
+| `done` | `{ suggestions[], spec, original_yaml, from_cache? }` |
 | `error` | `{ message }` |
 
 Each suggestion object:
@@ -419,6 +567,8 @@ Each suggestion object:
 `field` is one of: `description`, `example`, `x-ai`, `schema_property`
 
 `method` is one of: HTTP method lowercase (`get`, `post`, …), `component`, `info`
+
+`from_cache: true` appears on the `done` event when results were served from cache.
 
 ---
 
@@ -474,7 +624,7 @@ pip install -r backend/requirements.txt
 ```
 
 ### `openai.AuthenticationError`
-`OPENAI_API_KEY` in `backend/.env` is missing or invalid. Confirm the key has access to `gpt-4.1-mini`.
+`OPENAI_API_KEY` in `backend/.env` is missing or invalid. Confirm the key has access to the model set in `SUGGESTER_MODEL`.
 
 ### Frontend shows error or no suggestions appear
 Confirm the backend is running:
@@ -484,7 +634,7 @@ curl http://localhost:8000/health
 Confirm `BACKEND_URL` in `flask_ui/.env` matches the backend host/port.
 
 ### Walker finds 0 gaps but LLM still runs
-This happens when a Postman collection is uploaded. The walker found no missing fields, but the LLM still runs to check Postman differences (naming, types, error codes). This is correct behaviour.
+This happens when a Postman collection is uploaded. The walker found no missing fields, but LLM Call 2 still runs to check Postman differences (naming, types, error codes). This is correct behaviour.
 
 ### Walker finds 0 gaps and no Postman — tool returns "spec is complete"
 The spec already has all required fields. No LLM call is made. If you believe fields are missing, check `WALK_RULES` in `backend/agents/prompts.py` — a rule may be disabled.
@@ -497,22 +647,32 @@ The banner only appears if you had previously loaded suggestions and made at lea
 
 ### How to debug LLM issues
 After each run, check the `logs/` directory:
-- `logs/gaps.log` — full list of gaps sent to the LLM
-- `logs/llm_calls.log` — raw LLM request and response payloads (DEBUG level)
+- `logs/gaps.log` — full list of gaps sent to LLM Call 1
+- `logs/llm_calls.log` — raw request and response payloads for both LLM calls (DEBUG level)
 
-If a batch logs `possible output truncation`, reduce `BATCH_SIZE` or increase `BATCH_TOKENS` in `pipeline.py`.
+### `possible output truncation` warning in logs
+A batch returned fewer suggestions than gaps sent, which may indicate the model hit the output token limit. Reduce `BATCH_SIZE` or increase `BATCH_TOKENS` in `backend/.env`:
+```
+BATCH_SIZE=50
+BATCH_TOKENS=32768
+```
 
 ### Clearing the suggestion cache
-Delete the `.cache/` directory to force a fresh LLM run:
+Tick **Force refresh (ignore cache)** in the UI to clear just the current spec's cache entry and re-run the LLM.
+
+To clear all cached results:
 ```bash
 rm -rf .cache/
 ```
+
 The cache is automatically invalidated when `backend/agents/prompts.py` changes (rules update = new cache key). No manual clearing needed for rule changes.
 
 ### Tuning batch size for your model
-Edit `BATCH_SIZE` and `BATCH_TOKENS` at the top of `backend/pipeline.py`:
 
-| Model | BATCH_SIZE | BATCH_TOKENS |
-|---|---|---|
-| `gpt-4.1-mini` | 100 | 32768 |
-| `gpt-5-mini` / `gpt-5-nano` | 500 | 120000 |
+Set in `backend/.env` (no code changes needed):
+
+| Model | `SUGGESTER_MODEL` | `BATCH_TOKENS` | `BATCH_SIZE` |
+|---|---|---|---|
+| `gpt-4.1-mini` | `gpt-4.1-mini` | `32768` | `100` |
+| `gpt-5-mini` | `gpt-5-mini` | `120000` | `500` |
+| `gpt-5-nano` | `gpt-5-nano` | `120000` | `500` |
