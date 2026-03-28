@@ -101,10 +101,7 @@ def _get_yaml_context(spec: dict, suggestion: dict) -> dict:
     # Format the inserted line with matching indentation
     final_key = parts[-1]
     pad = " " * indent
-    if field == "x-ai":
-        inserted_line = f"{pad}{final_key}: true"
-    else:
-        inserted_line = f"{pad}{final_key}: {json.dumps(value)}"
+    inserted_line = f"{pad}{final_key}: {json.dumps(value)}"
 
     return {"context_lines": context_lines, "inserted_line": inserted_line}
 
@@ -205,7 +202,12 @@ def _apply_suggestion(spec: dict, suggestion: dict) -> None:
     path     = suggestion["path"]
     method   = suggestion["method"]
     location = suggestion["location"]
+    field    = suggestion.get("field", "")
     value    = suggestion["value"]
+
+    # LLM sometimes returns "true" as a string — coerce to proper boolean
+    if field == "x-ai":
+        value = True
 
     if method == "component":
         root = spec.get("components", {})
