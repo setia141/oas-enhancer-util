@@ -80,10 +80,6 @@ SUGGESTER_TOOLS = [
                                         "Full array [field1, field2] for required array schema_property."
                                     ),
                                 },
-                                "reason": {
-                                    "type": "string",
-                                    "description": "One short sentence explaining why this addition is useful.",
-                                },
                             },
                             "required": ["path", "method", "location", "field", "value"],
                         },
