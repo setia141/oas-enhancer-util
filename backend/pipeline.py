@@ -57,9 +57,10 @@ MAX_CONCURRENT     = 3
 # All tunables are overridable via .env — see backend/.env.example
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL",  "https://api.openai.com/v1")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY",   "")
-SUGGESTER_MODEL = os.environ.get("SUGGESTER_MODEL",  "gpt-4.1-mini")
-BATCH_TOKENS    = int(os.environ.get("BATCH_TOKENS", "32768"))
-BATCH_SIZE      = int(os.environ.get("BATCH_SIZE",   "100"))
+SUGGESTER_MODEL  = os.environ.get("SUGGESTER_MODEL",   "gpt-4.1-mini")
+BATCH_TOKENS     = int(os.environ.get("BATCH_TOKENS",  "32768"))
+BATCH_SIZE       = int(os.environ.get("BATCH_SIZE",    "50"))
+POSTMAN_TOKENS   = int(os.environ.get("POSTMAN_TOKENS", "65536"))
 
 _client: httpx.AsyncClient | None = None
 
@@ -254,7 +255,7 @@ async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
             ],
             "tools":       SUGGESTER_TOOLS,
             "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
-            "max_tokens":  BATCH_TOKENS,
+            "max_tokens":  POSTMAN_TOKENS,
         })
         elapsed = time.monotonic() - t0
         if not tool_args:
