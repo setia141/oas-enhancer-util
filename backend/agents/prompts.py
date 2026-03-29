@@ -68,31 +68,43 @@ Generate only the string value for that specific sub-tag.
 # ─────────────────────────────────────────────────────────────────────────────
 
 POSTMAN_RULES = """
-Cross-check the Postman collection against the OAS spec and apply the following rules:
+You are given a structured Postman summary listing observed endpoints, request fields, response codes,
+and response fields. You MUST process EVERY endpoint in the summary — do not skip any.
 
-1. NAMING INCONSISTENCIES — If a field in Postman uses a different naming convention than the OAS spec
-   (e.g. Postman uses camelCase `userId` but OAS uses snake_case `user_id`), use `field: "schema_property"`
-   to add the Postman-named version at the correct `properties` location.
+For each endpoint in the Postman summary, follow this checklist IN ORDER:
 
-2. ERROR CODES — If Postman shows a response with a status code (e.g. 400, 404, 422, 500) that is completely
-   absent from the OAS `responses` object for that operation, add it using `field: "schema_property"` at
-   location `responses.{code}`, with value being a complete response object:
-   {"description": "<meaningful error description>", "content": {"application/json": {"schema": {"type": "object",
-   "properties": {"error": {"type": "string", "description": "Error message.", "example": "Resource not found."}}}}}}
+STEP 1 — ERROR CODES
+  Compare "Response codes seen" against the OAS responses object for that operation.
+  For every code in Postman that is absent from OAS responses, add it using field: "schema_property"
+  at location `responses.{code}`, value must be a complete response object:
+  {"description": "<meaningful description>", "content": {"application/json": {"schema": {"type": "object",
+  "properties": {"error": {"type": "string", "description": "Error message.", "example": "Not found."}}}}}}
 
-3. MISSING PROPERTIES — For any field present in Postman request body or response that is absent from the
-   spec's `properties`, add it using `field: "schema_property"`. The value MUST include `type`, `description`,
-   AND `example` — e.g. {"type": "string", "description": "Role assigned to the user.", "example": "admin"}.
-   Never include only `type`. An incomplete schema causes re-run gaps.
+STEP 2 — MISSING REQUEST FIELDS
+  Compare "Request body fields" against the OAS requestBody schema properties.
+  For every field in Postman that is absent from OAS properties, add it using field: "schema_property"
+  at location `requestBody.content.application/json.schema.properties.{fieldName}`.
+  Value MUST include type, description, AND example.
 
-4. REQUIRED FIELDS — If Postman always sends a field in the request body, and it is not in the schema's
-   `required` array, suggest the updated required array using `field: "schema_property"` at location
-   `requestBody.content.application/json.schema.required`, with value being the complete updated array
-   e.g. ["email", "password", "role"].
+STEP 3 — MISSING RESPONSE FIELDS
+  For each response code, compare "Response {code} fields" against the OAS response schema properties.
+  For every field in Postman that is absent from OAS properties, add it using field: "schema_property"
+  at location `responses.{code}.content.application/json.schema.properties.{fieldName}`.
+  Value MUST include type, description, AND example.
 
-5. TYPE CORRECTIONS — If a field's type in the spec contradicts what Postman shows (e.g. spec says integer
-   but Postman shows a string like "usr_abc123"), suggest the corrected full schema using `field: "schema_property"`
-   with the correct `type`, `description`, AND `example`.
+STEP 4 — NAMING INCONSISTENCIES
+  If a Postman field uses camelCase (e.g. `shippingAddress`) but the OAS spec uses snake_case
+  (e.g. `shipping_address`) for the same concept, add the camelCase version as a schema_property.
+
+STEP 5 — TYPE CORRECTIONS
+  If the OAS spec declares a field as one type but Postman shows a different type
+  (e.g. spec says integer but Postman shows "usr_abc123"), suggest the corrected schema
+  with the correct type, description, AND example.
+
+IMPORTANT:
+- You MUST go through every single endpoint listed in the Postman summary. Do not stop early.
+- Only suggest changes that are supported by the Postman data — do not invent fields.
+- Every schema_property value must include type, description, and example. Incomplete values cause re-run gaps.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
