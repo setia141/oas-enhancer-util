@@ -192,7 +192,7 @@
         <div class="file-warn" id="oas-size-warn"></div>
       </div>
       <div class="field">
-        <label>Postman Collection <span class="opt">(optional)</span></label>
+        <label>Postman Collection <span class="opt"><strong>(Optional)</strong></span></label>
         <div id="dz-postman" class="dropzone"
           ondragover="dzDragOver(event,'dz-postman')" ondragleave="dzDragLeave('dz-postman')"
           ondrop="dzDrop(event,'dz-postman','postman')" onclick="document.getElementById('inp-postman').click()">
@@ -202,10 +202,11 @@
         </div>
         <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
-        <p style="margin:6px 0 0;font-size:12px;color:#888;line-height:1.5;">
-          Only needed if your API Catalog OAS differs from the actual API behaviour —
-          e.g. missing fields, wrong types, or undocumented error codes observed in real traffic.
-        </p>
+        <div style="margin:8px 0 0;padding:8px 10px;background:#fff8e1;border-left:3px solid #f59e0b;border-radius:3px;font-size:12px;color:#555;line-height:1.6;">
+          <strong>Try with just your OAS spec first.</strong> Add a Postman collection only if your
+          API Catalog OAS differs from actual API behaviour — e.g. missing fields, wrong types,
+          or undocumented error codes observed in real traffic.
+        </div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#666;margin-bottom:10px;cursor:pointer">
         <input type="checkbox" id="force-refresh"> Force refresh (ignore cache)
