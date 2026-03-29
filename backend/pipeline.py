@@ -60,7 +60,8 @@ OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY",   "")
 SUGGESTER_MODEL  = os.environ.get("SUGGESTER_MODEL",   "gpt-4.1-mini")
 BATCH_TOKENS     = int(os.environ.get("BATCH_TOKENS",  "32768"))
 BATCH_SIZE       = int(os.environ.get("BATCH_SIZE",    "50"))
-POSTMAN_TOKENS   = int(os.environ.get("POSTMAN_TOKENS", "32768"))
+POSTMAN_TOKENS      = int(os.environ.get("POSTMAN_TOKENS",      "32768"))
+POSTMAN_BATCH_SIZE  = int(os.environ.get("POSTMAN_BATCH_SIZE",  "2"))
 
 _client: httpx.AsyncClient | None = None
 
@@ -229,7 +230,45 @@ async def _run_batch(batch: list[Gap], spec: dict, num: int, total: int, sem: as
         return []
 
 
-# ── Postman analysis (needs full spec — separate call) ────────────────────────
+# ── Postman analysis — one batch per N endpoints, run concurrently ────────────
+
+async def _run_postman_batch(
+    batch: list,
+    spec_yaml: str,
+    num: int,
+    total: int,
+    sem: asyncio.Semaphore,
+) -> list[dict]:
+    async with sem:
+        user_content = (
+            f"OAS Spec (YAML):\n{spec_yaml}\n\n"
+            f"{format_postman(batch)}\n\n"
+            f"Apply Postman rules only — find schema_property gaps."
+        )
+        logger.info("Postman batch %d/%d — %d endpoint(s)", num, total, len(batch))
+        t0 = time.monotonic()
+        try:
+            tool_args = await _chat({
+                "model":       SUGGESTER_MODEL,
+                "messages":    [
+                    {"role": "system", "content": SUGGESTER_INSTRUCTION},
+                    {"role": "user",   "content": user_content},
+                ],
+                "tools":       SUGGESTER_TOOLS,
+                "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
+                "max_tokens":  POSTMAN_TOKENS,
+            })
+            elapsed = time.monotonic() - t0
+            if not tool_args:
+                logger.warning("Postman batch %d/%d — no tool call (%.1fs)", num, total, elapsed)
+                return []
+            suggestions = json.loads(tool_args).get("suggestions", [])
+            logger.info("Postman batch %d/%d done in %.1fs — %d suggestion(s)", num, total, elapsed, len(suggestions))
+            return suggestions
+        except Exception as e:
+            logger.error("Postman batch %d/%d error: %s", num, total, e, exc_info=True)
+            return []
+
 
 async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
     spec_paths = list(spec.get("paths", {}).keys())
@@ -237,36 +276,26 @@ async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
     if not endpoints:
         logger.warning("Postman parser extracted 0 endpoints — skipping Postman analysis")
         return []
-    logger.info("Postman parser — %d endpoint(s) extracted", len(endpoints))
-
-    user_content = (
-        f"OAS Spec (YAML):\n{_to_yaml(spec)}\n\n"
-        f"{format_postman(endpoints)}\n\n"
-        f"Apply Postman rules only — find schema_property gaps."
+    logger.info(
+        "Postman parser — %d endpoint(s) extracted, batch_size=%d",
+        len(endpoints), POSTMAN_BATCH_SIZE,
     )
-    logger.info("Postman analysis — sending full spec + parsed summary")
-    t0 = time.monotonic()
-    try:
-        tool_args = await _chat({
-            "model":       SUGGESTER_MODEL,
-            "messages":    [
-                {"role": "system", "content": SUGGESTER_INSTRUCTION},
-                {"role": "user",   "content": user_content},
-            ],
-            "tools":       SUGGESTER_TOOLS,
-            "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
-            "max_tokens":  POSTMAN_TOKENS,
-        })
-        elapsed = time.monotonic() - t0
-        if not tool_args:
-            logger.warning("Postman analysis — no tool call (%.1fs)", elapsed)
-            return []
-        suggestions = json.loads(tool_args).get("suggestions", [])
-        logger.info("Postman analysis done in %.1fs — %d suggestion(s)", elapsed, len(suggestions))
-        return suggestions
-    except Exception as e:
-        logger.error("Postman analysis error: %s", e, exc_info=True)
-        return []
+
+    spec_yaml = _to_yaml(spec)
+    batches   = [endpoints[i:i + POSTMAN_BATCH_SIZE] for i in range(0, len(endpoints), POSTMAN_BATCH_SIZE)]
+    sem       = asyncio.Semaphore(MAX_CONCURRENT)
+    logger.info("Postman — %d endpoint(s) → %d batch(es), max %d concurrent", len(endpoints), len(batches), MAX_CONCURRENT)
+
+    results = await asyncio.gather(*[
+        _run_postman_batch(b, spec_yaml, i + 1, len(batches), sem)
+        for i, b in enumerate(batches)
+    ])
+
+    all_suggestions: list[dict] = []
+    for r in results:
+        all_suggestions.extend(r)
+    logger.info("Postman analysis done — %d suggestion(s) total", len(all_suggestions))
+    return all_suggestions
 
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────

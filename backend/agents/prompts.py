@@ -70,6 +70,7 @@ Generate only the string value for that specific sub-tag.
 POSTMAN_RULES = """
 You are given a structured Postman summary. For EVERY endpoint listed, apply ALL of the following rules.
 Do not skip any endpoint. Do not output any text — only call submit_suggestions.
+IMPORTANT: For every suggestion, `path` MUST be the exact spec path of the endpoint (e.g. '/orders', '/orders/{orderId}'). NEVER set path to empty string '' — that is only for component schema suggestions which do NOT apply here.
 
 1. MISSING ERROR CODES — If Postman shows a response code (400, 401, 404, 409, 422, 500, etc.) that is
    absent from the OAS responses object for that operation, add it using field: "schema_property" at

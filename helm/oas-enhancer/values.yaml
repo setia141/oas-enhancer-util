@@ -23,8 +23,10 @@ backend:
   env:
     OPENAI_BASE_URL: "https://api.openai.com/v1"
     SUGGESTER_MODEL: "gpt-4.1-mini"
+    BATCH_SIZE: "50"
     BATCH_TOKENS: "32768"
-    BATCH_SIZE: "100"
+    POSTMAN_BATCH_SIZE: "2"
+    POSTMAN_TOKENS: "32768"
 
   # OPENAI_API_KEY — injected from a Kubernetes Secret (see secret.yaml)
   # Set secretName to an existing secret, or leave empty to create one
