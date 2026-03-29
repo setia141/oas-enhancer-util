@@ -132,6 +132,10 @@ def _enrich_suggestions(spec: dict, suggestions: list[dict]) -> list[dict]:
     dropped  = 0
     required_fields = {"method", "location", "field", "value"}
     for s in suggestions:
+        if not isinstance(s, dict):
+            logger.warning("Dropping non-dict suggestion: %r", s)
+            dropped += 1
+            continue
         missing = required_fields - s.keys()
         if missing or not s.get("location") or not s.get("method"):
             logger.warning(
