@@ -231,7 +231,8 @@ async def _run_batch(batch: list[Gap], spec: dict, num: int, total: int, sem: as
 # ── Postman analysis (needs full spec — separate call) ────────────────────────
 
 async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
-    endpoints = parse_postman(postman_text)
+    spec_paths = list(spec.get("paths", {}).keys())
+    endpoints = parse_postman(postman_text, spec_paths)
     if not endpoints:
         logger.warning("Postman parser extracted 0 endpoints — skipping Postman analysis")
         return []
