@@ -286,23 +286,6 @@ def test_mixed_folders_and_items():
     paths = {ep.path for ep in result}
     assert paths == {"/products", "/auth/login", "/health"}
 
-# ── GraphQL detection ─────────────────────────────────────────────────────────
-
-def test_graphql_collection_returns_empty():
-    col = _col([
-        _item("GetUser", "POST", "{{baseUrl}}/graphql",
-            body={"mode": "raw", "raw": json.dumps({"query": "{ user { id } }"})}),
-        _item("CreateUser", "POST", "{{baseUrl}}/graphql",
-            body={"mode": "raw", "raw": json.dumps({"query": "mutation { createUser }"})}),
-    ])
-    result = parse(col)
-    assert result == []
-
-def test_graphql_with_spec_paths_still_empty():
-    col = _col([_item("Q", "POST", "https://api.example.com/graphql")])
-    result = parse(col, spec_paths=["/users"])
-    assert result == []
-
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 def test_empty_collection():

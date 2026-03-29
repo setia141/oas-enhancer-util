@@ -191,18 +191,6 @@ def _match_to_spec_paths(endpoints: list[ParsedEndpoint], spec_paths: list[str])
     return list(merged.values())
 
 
-# ── GraphQL detection ─────────────────────────────────────────────────────────
-
-def _is_graphql(acc: dict) -> bool:
-    """
-    Return True if the collection looks like a GraphQL collection —
-    all requests go to a single path containing 'graphql'.
-    Sending this to the LLM as schema diffs would produce noise.
-    """
-    paths = {path for (_, path) in acc}
-    return len(paths) == 1 and 'graphql' in next(iter(paths)).lower()
-
-
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def parse(collection_text: str, spec_paths: list[str] | None = None) -> list[ParsedEndpoint]:
@@ -221,7 +209,7 @@ def parse(collection_text: str, spec_paths: list[str] | None = None) -> list[Par
     acc: dict = {}
     _walk(collection.get('item', []), acc)
 
-    if not acc or _is_graphql(acc):
+    if not acc:
         return []
 
     endpoints = [
