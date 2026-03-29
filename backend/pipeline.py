@@ -60,7 +60,7 @@ OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY",   "")
 SUGGESTER_MODEL  = os.environ.get("SUGGESTER_MODEL",   "gpt-4.1-mini")
 BATCH_TOKENS     = int(os.environ.get("BATCH_TOKENS",  "32768"))
 BATCH_SIZE       = int(os.environ.get("BATCH_SIZE",    "50"))
-POSTMAN_TOKENS   = int(os.environ.get("POSTMAN_TOKENS", "65536"))
+POSTMAN_TOKENS   = int(os.environ.get("POSTMAN_TOKENS", "32768"))
 
 _client: httpx.AsyncClient | None = None
 
