@@ -202,6 +202,10 @@
         </div>
         <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
         <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
+        <p style="margin:6px 0 0;font-size:12px;color:#888;line-height:1.5;">
+          Only needed if your API Catalog OAS differs from the actual API behaviour —
+          e.g. missing fields, wrong types, or undocumented error codes observed in real traffic.
+        </p>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#666;margin-bottom:10px;cursor:pointer">
         <input type="checkbox" id="force-refresh"> Force refresh (ignore cache)
