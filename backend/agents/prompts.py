@@ -68,43 +68,32 @@ Generate only the string value for that specific sub-tag.
 # ─────────────────────────────────────────────────────────────────────────────
 
 POSTMAN_RULES = """
-You are given a structured Postman summary listing observed endpoints, request fields, response codes,
-and response fields. You MUST process EVERY endpoint in the summary — do not skip any.
+You are given a structured Postman summary. For EVERY endpoint listed, apply ALL of the following rules.
+Do not skip any endpoint. Do not output any text — only call submit_suggestions.
 
-For each endpoint in the Postman summary, follow this checklist IN ORDER:
+1. MISSING ERROR CODES — If Postman shows a response code (400, 401, 404, 409, 422, 500, etc.) that is
+   absent from the OAS responses object for that operation, add it using field: "schema_property" at
+   location `responses.{code}`, value must be a complete response object:
+   {"description": "<meaningful description>", "content": {"application/json": {"schema": {"type": "object",
+   "properties": {"error": {"type": "string", "description": "Error message.", "example": "Not found."}}}}}}
 
-STEP 1 — ERROR CODES
-  Compare "Response codes seen" against the OAS responses object for that operation.
-  For every code in Postman that is absent from OAS responses, add it using field: "schema_property"
-  at location `responses.{code}`, value must be a complete response object:
-  {"description": "<meaningful description>", "content": {"application/json": {"schema": {"type": "object",
-  "properties": {"error": {"type": "string", "description": "Error message.", "example": "Not found."}}}}}}
+2. MISSING REQUEST FIELDS — For any field in Postman request body absent from OAS requestBody properties,
+   add it using field: "schema_property" at location
+   `requestBody.content.application/json.schema.properties.{fieldName}`.
+   Value MUST include type, description, AND example.
 
-STEP 2 — MISSING REQUEST FIELDS
-  Compare "Request body fields" against the OAS requestBody schema properties.
-  For every field in Postman that is absent from OAS properties, add it using field: "schema_property"
-  at location `requestBody.content.application/json.schema.properties.{fieldName}`.
-  Value MUST include type, description, AND example.
+3. MISSING RESPONSE FIELDS — For any field in a Postman response body absent from OAS response properties,
+   add it using field: "schema_property" at location
+   `responses.{code}.content.application/json.schema.properties.{fieldName}`.
+   Value MUST include type, description, AND example.
 
-STEP 3 — MISSING RESPONSE FIELDS
-  For each response code, compare "Response {code} fields" against the OAS response schema properties.
-  For every field in Postman that is absent from OAS properties, add it using field: "schema_property"
-  at location `responses.{code}.content.application/json.schema.properties.{fieldName}`.
-  Value MUST include type, description, AND example.
+4. NAMING INCONSISTENCIES — If Postman uses camelCase (e.g. shippingAddress) but OAS uses snake_case
+   (e.g. shipping_address) for the same concept, add the camelCase version as a schema_property.
 
-STEP 4 — NAMING INCONSISTENCIES
-  If a Postman field uses camelCase (e.g. `shippingAddress`) but the OAS spec uses snake_case
-  (e.g. `shipping_address`) for the same concept, add the camelCase version as a schema_property.
+5. TYPE CORRECTIONS — If OAS declares a field as one type but Postman shows a different type,
+   suggest the corrected schema with the correct type, description, AND example.
 
-STEP 5 — TYPE CORRECTIONS
-  If the OAS spec declares a field as one type but Postman shows a different type
-  (e.g. spec says integer but Postman shows "usr_abc123"), suggest the corrected schema
-  with the correct type, description, AND example.
-
-IMPORTANT:
-- You MUST go through every single endpoint listed in the Postman summary. Do not stop early.
-- Only suggest changes that are supported by the Postman data — do not invent fields.
-- Every schema_property value must include type, description, and example. Incomplete values cause re-run gaps.
+Process every endpoint in the summary before calling submit_suggestions.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
