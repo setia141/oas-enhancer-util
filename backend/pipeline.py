@@ -6,6 +6,8 @@ Phase 2 — LLM: gaps split into batches; each batch gets only its relevant
            spec sections as context. Batches run concurrently.
 
 Postman analysis runs as a separate single LLM call (needs the full spec).
+The raw collection is pre-parsed by postman_parser.py into a clean per-endpoint
+summary before being sent to the LLM — scripts, auth, and env variables stripped.
 
 Results are cached in .cache/ keyed on spec + postman content + prompts hash.
 Cache is automatically invalidated when prompts.py changes.
@@ -23,6 +25,7 @@ import yaml
 
 from .agents.prompts import SUGGESTER_INSTRUCTION, WALK_RULES
 from .agents.tools import SUGGESTER_TOOLS
+from .postman_parser import parse as parse_postman, format_for_llm as format_postman
 from .spec_walker import walk, Gap
 
 logger = logging.getLogger(__name__)
@@ -228,11 +231,18 @@ async def _run_batch(batch: list[Gap], spec: dict, num: int, total: int, sem: as
 # ── Postman analysis (needs full spec — separate call) ────────────────────────
 
 async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
+    endpoints = parse_postman(postman_text)
+    if not endpoints:
+        logger.warning("Postman parser extracted 0 endpoints — skipping Postman analysis")
+        return []
+    logger.info("Postman parser — %d endpoint(s) extracted", len(endpoints))
+
     user_content = (
         f"OAS Spec (YAML):\n{_to_yaml(spec)}\n\n"
-        f"Postman Collection — apply Postman rules only, find schema_property gaps:\n{postman_text}"
+        f"{format_postman(endpoints)}\n\n"
+        f"Apply Postman rules only — find schema_property gaps."
     )
-    logger.info("Postman analysis — sending full spec")
+    logger.info("Postman analysis — sending full spec + parsed summary")
     t0 = time.monotonic()
     try:
         tool_args = await _chat({
