@@ -137,7 +137,11 @@ async def _chat(payload: dict) -> str:
             async for line in resp.aiter_lines():
                 if not line.startswith("data: ") or line == "data: [DONE]":
                     continue
-                chunk = json.loads(line[6:])
+                try:
+                    chunk = json.loads(line[6:])
+                except json.JSONDecodeError:
+                    _llm_logger.warning("Skipping malformed SSE chunk: %r", line[:200])
+                    continue
                 for choice in chunk.get("choices", []):
                     for tc in (choice.get("delta", {}).get("tool_calls") or []):
                         tool_args += tc.get("function", {}).get("arguments", "")
@@ -212,6 +216,7 @@ async def _run_batch(batch: list[Gap], spec: dict, num: int, total: int, sem: as
         "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
         "max_tokens":  BATCH_TOKENS,
     }
+    delay = 0.0
 
     for attempt in range(1, MAX_RETRIES + 1):
         async with sem:                    # semaphore acquired per attempt — released before sleep
@@ -285,6 +290,7 @@ async def _run_postman_batch(
         "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
         "max_tokens":  POSTMAN_TOKENS,
     }
+    delay = 0.0
 
     for attempt in range(1, MAX_RETRIES + 1):
         async with sem:                    # semaphore acquired per attempt — released before sleep
@@ -309,6 +315,13 @@ async def _run_postman_batch(
                 delay = _retry_delay(attempt)
                 logger.warning("Postman batch %d/%d — HTTP %d, retry %d/%d in %.1fs",
                                num, total, e.response.status_code, attempt, MAX_RETRIES, delay)
+            except json.JSONDecodeError:
+                logger.error("Postman batch %d/%d — JSON decode failed (max_tokens=%d). Reduce POSTMAN_BATCH_SIZE or increase POSTMAN_TOKENS.",
+                             num, total, POSTMAN_TOKENS)
+                return []
+            except TimeoutError:
+                logger.error("Postman batch %d/%d — timed out after %ds", num, total, SUGGESTER_TIMEOUT)
+                return []
             except Exception as e:
                 logger.error("Postman batch %d/%d error: %s", num, total, e, exc_info=True)
                 return []
