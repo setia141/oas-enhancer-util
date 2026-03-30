@@ -1,12 +1,16 @@
 """
-Example: your existing FastAPI app with OAS Enhancer router plugged in.
+Integration examples for embedding OAS Enhancer into an existing app.
 
-Only 3 things added to your existing server.py:
+FastAPI backend — add 3 things to your existing server.py:
   1. Import the router and init_client
   2. Call init_client() inside your existing @app.on_event("startup")
   3. app.include_router(oas_router)
 
-Everything else below is your existing code — untouched.
+Flask frontend — add 2 things to your existing app.py:
+  1. Import the blueprint
+  2. app.register_blueprint(oas_blueprint)
+
+See comments below for each.
 """
 import logging
 
@@ -53,3 +57,16 @@ async def root():
     return {"message": "Your existing app"}
 
 # ... rest of your routes ...
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Flask frontend integration (your existing flask app.py)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# from flask_ui.blueprint import oas_blueprint   # ← 1. import
+#
+# app.register_blueprint(oas_blueprint)          # ← 2. register
+#
+# Routes added: GET  /oas-enhancer/         — UI page
+#               POST /oas-enhancer/suggest  — SSE proxy to backend
+#               POST /oas-enhancer/apply    — apply proxy to backend
