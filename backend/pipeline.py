@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 from typing import AsyncGenerator
 
@@ -53,6 +54,12 @@ with open(_PROMPTS_FILE, "rb") as _f:
 SUGGESTER_TIMEOUT  = 300
 HEARTBEAT_INTERVAL = 5
 MAX_CONCURRENT     = 3
+
+# Retry on transient gateway errors (503, 429, 502, 504).
+# Permanent errors (400, 401, 422) are not retried.
+_RETRYABLE_STATUS  = {429, 502, 503, 504}
+MAX_RETRIES        = int(os.environ.get("MAX_RETRIES",   "3"))
+RETRY_BASE_DELAY   = float(os.environ.get("RETRY_BASE_DELAY", "2.0"))   # seconds
 
 # All tunables are overridable via .env — see backend/.env.example
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL",  "https://api.openai.com/v1")
@@ -118,19 +125,38 @@ def _save_cache(key: str, suggestions: list[dict]) -> None:
 async def _chat(payload: dict) -> str:
     payload = {**payload, "stream": True}
     _llm_logger.debug("REQUEST\n%s", json.dumps(payload, indent=2, default=str))
-    async with asyncio.timeout(SUGGESTER_TIMEOUT):
-        async with _client.stream("POST", "/chat/completions", json=payload) as resp:
-            resp.raise_for_status()
-            tool_args = ""
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: ") or line == "data: [DONE]":
-                    continue
-                chunk = json.loads(line[6:])
-                for choice in chunk.get("choices", []):
-                    for tc in (choice.get("delta", {}).get("tool_calls") or []):
-                        tool_args += tc.get("function", {}).get("arguments", "")
-    _llm_logger.debug("RESPONSE\n%s", tool_args)
-    return tool_args
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            async with asyncio.timeout(SUGGESTER_TIMEOUT):
+                async with _client.stream("POST", "/chat/completions", json=payload) as resp:
+                    if resp.status_code in _RETRYABLE_STATUS:
+                        raise httpx.HTTPStatusError(
+                            f"Retryable {resp.status_code}", request=resp.request, response=resp,
+                        )
+                    resp.raise_for_status()
+                    tool_args = ""
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: ") or line == "data: [DONE]":
+                            continue
+                        chunk = json.loads(line[6:])
+                        for choice in chunk.get("choices", []):
+                            for tc in (choice.get("delta", {}).get("tool_calls") or []):
+                                tool_args += tc.get("function", {}).get("arguments", "")
+            _llm_logger.debug("RESPONSE\n%s", tool_args)
+            return tool_args
+
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status not in _RETRYABLE_STATUS or attempt == MAX_RETRIES:
+                raise
+            delay = RETRY_BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
+            logger.warning(
+                "HTTP %d from gateway — retry %d/%d in %.1fs", status, attempt, MAX_RETRIES, delay,
+            )
+            await asyncio.sleep(delay)
+
+    return ""  # unreachable — MAX_RETRIES exhausted raises above
 
 
 # ── Spec context — only sections relevant to this batch ──────────────────────
