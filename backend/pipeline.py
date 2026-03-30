@@ -123,40 +123,31 @@ def _save_cache(key: str, suggestions: list[dict]) -> None:
 # ── LLM ───────────────────────────────────────────────────────────────────────
 
 async def _chat(payload: dict) -> str:
+    """Single HTTP attempt — no retry logic here. Callers handle retries outside the semaphore."""
     payload = {**payload, "stream": True}
     _llm_logger.debug("REQUEST\n%s", json.dumps(payload, indent=2, default=str))
+    async with asyncio.timeout(SUGGESTER_TIMEOUT):
+        async with _client.stream("POST", "/chat/completions", json=payload) as resp:
+            if resp.status_code in _RETRYABLE_STATUS:
+                raise httpx.HTTPStatusError(
+                    f"Retryable {resp.status_code}", request=resp.request, response=resp,
+                )
+            resp.raise_for_status()
+            tool_args = ""
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: ") or line == "data: [DONE]":
+                    continue
+                chunk = json.loads(line[6:])
+                for choice in chunk.get("choices", []):
+                    for tc in (choice.get("delta", {}).get("tool_calls") or []):
+                        tool_args += tc.get("function", {}).get("arguments", "")
+    _llm_logger.debug("RESPONSE\n%s", tool_args)
+    return tool_args
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            async with asyncio.timeout(SUGGESTER_TIMEOUT):
-                async with _client.stream("POST", "/chat/completions", json=payload) as resp:
-                    if resp.status_code in _RETRYABLE_STATUS:
-                        raise httpx.HTTPStatusError(
-                            f"Retryable {resp.status_code}", request=resp.request, response=resp,
-                        )
-                    resp.raise_for_status()
-                    tool_args = ""
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data: ") or line == "data: [DONE]":
-                            continue
-                        chunk = json.loads(line[6:])
-                        for choice in chunk.get("choices", []):
-                            for tc in (choice.get("delta", {}).get("tool_calls") or []):
-                                tool_args += tc.get("function", {}).get("arguments", "")
-            _llm_logger.debug("RESPONSE\n%s", tool_args)
-            return tool_args
 
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            if status not in _RETRYABLE_STATUS or attempt == MAX_RETRIES:
-                raise
-            delay = RETRY_BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
-            logger.warning(
-                "HTTP %d from gateway — retry %d/%d in %.1fs", status, attempt, MAX_RETRIES, delay,
-            )
-            await asyncio.sleep(delay)
-
-    return ""  # unreachable — MAX_RETRIES exhausted raises above
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff with jitter: 2s, 4s, 8s, ... + up to 1s jitter."""
+    return RETRY_BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
 
 
 # ── Spec context — only sections relevant to this batch ──────────────────────
@@ -210,50 +201,64 @@ def _format_gaps(gaps: list[Gap]) -> str:
 # ── Single batch call ─────────────────────────────────────────────────────────
 
 async def _run_batch(batch: list[Gap], spec: dict, num: int, total: int, sem: asyncio.Semaphore) -> list[dict]:
-    async with sem:
-        user_content = f"Relevant spec sections:\n{_spec_context(spec, batch)}\n\n{_format_gaps(batch)}"
-        logger.info("Batch %d/%d — %d gaps, max_tokens=%d", num, total, len(batch), BATCH_TOKENS)
-        t0 = time.monotonic()
-        try:
-            tool_args = await _chat({
-                "model":       SUGGESTER_MODEL,
-                "messages":    [
-                    {"role": "system", "content": SUGGESTER_INSTRUCTION},
-                    {"role": "user",   "content": user_content},
-                ],
-                "tools":       SUGGESTER_TOOLS,
-                "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
-                "max_tokens":  BATCH_TOKENS,
-            })
-            elapsed = time.monotonic() - t0
+    user_content = f"Relevant spec sections:\n{_spec_context(spec, batch)}\n\n{_format_gaps(batch)}"
+    payload = {
+        "model":       SUGGESTER_MODEL,
+        "messages":    [
+            {"role": "system", "content": SUGGESTER_INSTRUCTION},
+            {"role": "user",   "content": user_content},
+        ],
+        "tools":       SUGGESTER_TOOLS,
+        "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
+        "max_tokens":  BATCH_TOKENS,
+    }
 
-            if not tool_args:
-                logger.warning("Batch %d/%d — no tool call returned (%.1fs)", num, total, elapsed)
+    for attempt in range(1, MAX_RETRIES + 1):
+        async with sem:                    # semaphore acquired per attempt — released before sleep
+            logger.info("Batch %d/%d — %d gaps, max_tokens=%d%s",
+                        num, total, len(batch), BATCH_TOKENS,
+                        f" (retry {attempt}/{MAX_RETRIES})" if attempt > 1 else "")
+            t0 = time.monotonic()
+            try:
+                tool_args = await _chat(payload)
+                elapsed = time.monotonic() - t0
+
+                if not tool_args:
+                    logger.warning("Batch %d/%d — no tool call returned (%.1fs)", num, total, elapsed)
+                    return []
+
+                suggestions = json.loads(tool_args).get("suggestions", [])
+                logger.info("Batch %d/%d done in %.1fs — %d/%d gaps filled", num, total, elapsed, len(suggestions), len(batch))
+
+                if len(suggestions) < len(batch):
+                    logger.warning(
+                        "Batch %d/%d — got %d suggestions for %d gaps — possible output truncation. "
+                        "Consider reducing BATCH_SIZE (currently %d) or increasing BATCH_TOKENS (currently %d).",
+                        num, total, len(suggestions), len(batch), BATCH_SIZE, BATCH_TOKENS,
+                    )
+                return suggestions
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code not in _RETRYABLE_STATUS or attempt == MAX_RETRIES:
+                    logger.error("Batch %d/%d — HTTP %d (not retrying)", num, total, e.response.status_code)
+                    return []
+                delay = _retry_delay(attempt)
+                logger.warning("Batch %d/%d — HTTP %d, retry %d/%d in %.1fs",
+                               num, total, e.response.status_code, attempt, MAX_RETRIES, delay)
+            except json.JSONDecodeError:
+                logger.error("Batch %d/%d — JSON decode failed (max_tokens=%d). Reduce BATCH_SIZE or increase BATCH_TOKENS.",
+                             num, total, BATCH_TOKENS)
                 return []
+            except TimeoutError:
+                logger.error("Batch %d/%d — timed out after %ds", num, total, SUGGESTER_TIMEOUT)
+                return []
+            except Exception as e:
+                logger.error("Batch %d/%d — error: %s", num, total, e, exc_info=True)
+                return []
+        # semaphore released — sleep without holding it
+        await asyncio.sleep(delay)
 
-            suggestions = json.loads(tool_args).get("suggestions", [])
-            logger.info("Batch %d/%d done in %.1fs — %d/%d gaps filled", num, total, elapsed, len(suggestions), len(batch))
-
-            if len(suggestions) < len(batch):
-                logger.warning(
-                    "Batch %d/%d — got %d suggestions for %d gaps — possible output truncation. "
-                    "Consider reducing BATCH_SIZE (currently %d) or increasing BATCH_TOKENS (currently %d).",
-                    num, total, len(suggestions), len(batch), BATCH_SIZE, BATCH_TOKENS,
-                )
-
-            return suggestions
-
-        except json.JSONDecodeError:
-            logger.error(
-                "Batch %d/%d — JSON decode failed — output was likely truncated at max_tokens=%d. "
-                "Reduce BATCH_SIZE or increase BATCH_TOKENS.",
-                num, total, BATCH_TOKENS,
-            )
-        except TimeoutError:
-            logger.error("Batch %d/%d — timed out after %ds", num, total, SUGGESTER_TIMEOUT)
-        except Exception as e:
-            logger.error("Batch %d/%d — error: %s", num, total, e, exc_info=True)
-        return []
+    return []
 
 
 # ── Postman analysis — one batch per N endpoints, run concurrently ────────────
@@ -265,35 +270,52 @@ async def _run_postman_batch(
     total: int,
     sem: asyncio.Semaphore,
 ) -> list[dict]:
-    async with sem:
-        user_content = (
-            f"OAS Spec (YAML):\n{spec_yaml}\n\n"
-            f"{format_postman(batch)}\n\n"
-            f"Apply Postman rules only — find schema_property gaps."
-        )
-        logger.info("Postman batch %d/%d — %d endpoint(s)", num, total, len(batch))
-        t0 = time.monotonic()
-        try:
-            tool_args = await _chat({
-                "model":       SUGGESTER_MODEL,
-                "messages":    [
-                    {"role": "system", "content": SUGGESTER_INSTRUCTION},
-                    {"role": "user",   "content": user_content},
-                ],
-                "tools":       SUGGESTER_TOOLS,
-                "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
-                "max_tokens":  POSTMAN_TOKENS,
-            })
-            elapsed = time.monotonic() - t0
-            if not tool_args:
-                logger.warning("Postman batch %d/%d — no tool call (%.1fs)", num, total, elapsed)
+    user_content = (
+        f"OAS Spec (YAML):\n{spec_yaml}\n\n"
+        f"{format_postman(batch)}\n\n"
+        f"Apply Postman rules only — find schema_property gaps."
+    )
+    payload = {
+        "model":       SUGGESTER_MODEL,
+        "messages":    [
+            {"role": "system", "content": SUGGESTER_INSTRUCTION},
+            {"role": "user",   "content": user_content},
+        ],
+        "tools":       SUGGESTER_TOOLS,
+        "tool_choice": {"type": "function", "function": {"name": "submit_suggestions"}},
+        "max_tokens":  POSTMAN_TOKENS,
+    }
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        async with sem:                    # semaphore acquired per attempt — released before sleep
+            logger.info("Postman batch %d/%d — %d endpoint(s)%s",
+                        num, total, len(batch),
+                        f" (retry {attempt}/{MAX_RETRIES})" if attempt > 1 else "")
+            t0 = time.monotonic()
+            try:
+                tool_args = await _chat(payload)
+                elapsed = time.monotonic() - t0
+                if not tool_args:
+                    logger.warning("Postman batch %d/%d — no tool call (%.1fs)", num, total, elapsed)
+                    return []
+                suggestions = json.loads(tool_args).get("suggestions", [])
+                logger.info("Postman batch %d/%d done in %.1fs — %d suggestion(s)", num, total, elapsed, len(suggestions))
+                return suggestions
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code not in _RETRYABLE_STATUS or attempt == MAX_RETRIES:
+                    logger.error("Postman batch %d/%d — HTTP %d (not retrying)", num, total, e.response.status_code)
+                    return []
+                delay = _retry_delay(attempt)
+                logger.warning("Postman batch %d/%d — HTTP %d, retry %d/%d in %.1fs",
+                               num, total, e.response.status_code, attempt, MAX_RETRIES, delay)
+            except Exception as e:
+                logger.error("Postman batch %d/%d error: %s", num, total, e, exc_info=True)
                 return []
-            suggestions = json.loads(tool_args).get("suggestions", [])
-            logger.info("Postman batch %d/%d done in %.1fs — %d suggestion(s)", num, total, elapsed, len(suggestions))
-            return suggestions
-        except Exception as e:
-            logger.error("Postman batch %d/%d error: %s", num, total, e, exc_info=True)
-            return []
+        # semaphore released — sleep without holding it
+        await asyncio.sleep(delay)
+
+    return []
 
 
 async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
