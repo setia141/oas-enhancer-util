@@ -23,6 +23,9 @@ from typing import AsyncGenerator
 
 import httpx
 import yaml
+from dotenv import load_dotenv
+
+load_dotenv()  # works whether run standalone or imported as a library
 
 from .agents.prompts import SUGGESTER_INSTRUCTION, WALK_RULES
 from .agents.tools import SUGGESTER_TOOLS
