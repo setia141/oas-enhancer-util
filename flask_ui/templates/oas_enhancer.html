@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}OAS Enhancer{% endblock %}
+
+{% block content %}
+<div id="root"></div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="module" src="{{ url_for('static', filename='oas-enhancer/assets/index.js') }}"></script>
+{% endblock %}
