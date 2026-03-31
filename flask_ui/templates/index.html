@@ -369,7 +369,7 @@ async function handleSubmit() {
   if (document.getElementById('force-refresh').checked) form.append('force_refresh', 'true')
 
   try {
-    const resp = await fetch('/oas-enhancer/suggest', { method:'POST', body:form })
+    const resp = await fetch('/suggest', { method:'POST', body:form })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || `Server error ${resp.status}`)
@@ -639,7 +639,7 @@ async function applyAccepted() {
   applyBtn.disabled    = true
 
   try {
-    const resp = await fetch('/oas-enhancer/apply', {
+    const resp = await fetch('/apply', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ spec: state.spec, accepted }),
