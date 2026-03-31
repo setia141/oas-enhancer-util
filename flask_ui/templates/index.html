@@ -2,7 +2,7 @@
 
 {% block title %}OAS Enhancer{% endblock %}
 
-{% block styles %}
+{% block content %}
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -146,9 +146,6 @@
   .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
   .retry-btn  { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
 </style>
-{% endblock %}
-
-{% block content %}
 <!-- IDLE -->
 <div id="phase-idle" class="page-center">
   <div class="upload-card">
@@ -264,10 +261,6 @@
   <div class="error-msg" id="error-msg"></div>
   <button class="retry-btn" onclick="resetAll()">Try Again</button>
 </div>
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
 <script>
 // ── State ──────────────────────────────────────────────────────────
 let state = {
