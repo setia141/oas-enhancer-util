@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/deepa/sample-adk-app -type f \\\\\\(-name *.py -o -name *.ts -o -name *.tsx -o -name *.js \\\\\\) -not -path */.venv/* -not -path */node_modules/*)",
+      "Bash(grep:*)",
+      "Bash(find /c/Users/deepa/sample-adk-app -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\) -not -path */.venv/* -not -path */node_modules/* -not -path */.next/*)",
+      "Bash(ls -la /c/Users/deepa/sample-adk-app/*.py /c/Users/deepa/sample-adk-app/*.md /c/Users/deepa/sample-adk-app/Dockerfile)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find C:/Users/deepa/sample-adk-app/oas-enhancer-util/ -maxdepth 2 -name *.env* -o -name docker-compose* -o -name .env*)",
+      "Bash(python3:*)",
+      "Bash(backend/Scripts/python.exe -c \":*)",
+      "Bash(backend/.venv/Scripts/python.exe -c \":*)",
+      "Bash(venv/Scripts/python.exe -c \":*)",
+      "Bash(python \"C:/Users/deepa/sample-adk-app/oas-enhancer-util/llm_calls.log\")",
+      "Bash(py --version)",
+      "Bash(py:*)",
+      "Bash(git checkout:*)",
+      "Bash(python -c \"from backend.spec_walker import walk, WalkRules; print\\(''walker import ok''\\)\")",
+      "Bash(backend/Scripts/python -c \"from backend.spec_walker import walk, WalkRules; print\\(''walker import ok''\\)\")",
+      "Bash(backend/Scripts/python -c \":*)",
+      "Bash(backend/Scripts/python -c \"import sys; print\\(sys.path\\)\")",
+      "Bash(backend/Scripts/python -c \"import yaml; print\\(''yaml ok''\\)\")",
+      "Bash(backend/Scripts/pip install:*)",
+      "Bash(venv/Scripts/python -c \":*)",
+      "Bash(\"C:\\\\Users\\\\deepa\\\\sample-adk-app\\\\oas-enhancer-util\\\\.gitignore\")",
+      "Bash(echo \"gunicorn>=21.2.0\")",
+      "Bash(\"C:\\\\Users\\\\deepa\\\\sample-adk-app\\\\oas-enhancer-util\\\\flask_ui\\\\requirements.txt\")",
+      "Bash(python tests/test_postman_parser.py)",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"import backend.pipeline; print\\(''import ok''\\)\")",
+      "Bash(venv/Scripts/python -c \"import backend.pipeline; print\\(''import ok''\\)\")",
+      "Bash(python -c \"from backend.server import app; print\\(''OK''\\)\")",
+      "Bash(backend/Scripts/python.exe -c \"from backend.server import app; print\\(''OK''\\)\")",
+      "Bash(backend/Scripts/python.exe -m pip show python-dotenv fastapi)",
+      "Bash(backend/Scripts/python.exe -c \"import sys; sys.path.insert\\(0, ''.''\\); from backend.server import app; print\\(''OK''\\)\")",
+      "Bash(backend/Scripts/python.exe -c \"import sys; print\\(sys.path\\)\")",
+      "Bash(backend/Scripts/python.exe -m pip list)"
+    ]
+  }
+}
