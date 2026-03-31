@@ -19,7 +19,7 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { status, user } = useAuth()
+  const { status, user, logout } = useAuth()
 
   // UI state machine: idle | running | done | error
   const [phase, setPhase] = useState('idle')
@@ -118,50 +118,86 @@ export default function App() {
   if (status === 'loading') return <LoadingScreen />
   if (status === 'unauthorized') return <AccessDenied groupError={null} />
 
-  // ── Content only — nav/header/footer provided by the base HTML ─
+  // ── App shell ─────────────────────────────────────────────────
   return (
-    <div style={{ width: '100%', padding: '32px 16px' }}>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f2f5' }}>
 
-      {phase === 'idle' && (
-        <UploadForm onSubmit={handleSubmit} loading={false} />
-      )}
-
-      {phase === 'running' && (
-        <ProgressTracker
-          currentIteration={currentIteration}
-          iterations={iterations}
-          reviewData={reviewData}
-          isComplete={false}
-        />
-      )}
-
-      {phase === 'done' && result && (
-        <ResultViewer
-          result={result}
-          originalFilename={originalFilename}
-          userName={user?.name}
-          onReset={resetAll}
-        />
-      )}
-
-      {phase === 'error' && (
-        <div style={{ width: '100%', maxWidth: 560 }}>
+      {/* Nav */}
+      <header style={{
+        background: '#fff', borderBottom: '1px solid #e8eaed',
+        padding: '0 24px', display: 'flex', alignItems: 'center', gap: 12, height: 56, flexShrink: 0,
+      }}>
+        <div style={{ fontSize: 20 }}>📄</div>
+        <div style={{ fontWeight: 700, fontSize: 16, flex: 1 }}>OAS Enhancer</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            padding: '16px', background: '#fce8e6', color: '#c5221f',
-            borderRadius: 8, fontSize: 13, marginBottom: 12,
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #4285f4, #34a853)',
+            color: '#fff', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 13, fontWeight: 700,
           }}>
-            ⚠ {error}
+            {user?.name?.[0]?.toUpperCase()}
           </div>
-          <button onClick={resetAll} style={{
-            padding: '10px 20px', background: '#4285f4', color: '#fff',
-            border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
-            fontFamily: 'inherit',
-          }}>
-            Try Again
-          </button>
+          <div style={{ lineHeight: 1.3 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>{user?.name}</div>
+            <div style={{ fontSize: 11, color: '#888' }}>{user?.email}</div>
+          </div>
         </div>
-      )}
+        <button onClick={logout} style={{
+          padding: '6px 14px', fontSize: 12,
+          background: 'transparent', border: '1px solid #e0e0e0',
+          borderRadius: 6, cursor: 'pointer', color: '#666',
+          fontFamily: 'inherit', marginLeft: 8,
+        }}>
+          Sign out
+        </button>
+      </header>
 
+      {/* Main */}
+      <main style={{
+        flex: 1, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', padding: '32px 16px',
+      }}>
+        {phase === 'idle' && (
+          <UploadForm onSubmit={handleSubmit} loading={false} />
+        )}
+
+        {phase === 'running' && (
+          <ProgressTracker
+            currentIteration={currentIteration}
+            iterations={iterations}
+            reviewData={reviewData}
+            isComplete={false}
+          />
+        )}
+
+        {phase === 'done' && result && (
+          <ResultViewer
+            result={result}
+            originalFilename={originalFilename}
+            userName={user?.name}
+            onReset={resetAll}
+          />
+        )}
+
+        {phase === 'error' && (
+          <div style={{ width: '100%', maxWidth: 560 }}>
+            <div style={{
+              padding: '16px', background: '#fce8e6', color: '#c5221f',
+              borderRadius: 8, fontSize: 13, marginBottom: 12,
+            }}>
+              ⚠ {error}
+            </div>
+            <button onClick={resetAll} style={{
+              padding: '10px 20px', background: '#4285f4', color: '#fff',
+              border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14,
+              fontFamily: 'inherit',
+            }}>
+              Try Again
+            </button>
+          </div>
+        )}
+      </main>
     </div>
   )
 }
