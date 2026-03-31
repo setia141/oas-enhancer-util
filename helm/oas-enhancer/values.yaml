@@ -1,0 +1,75 @@
+# ── Image registry ────────────────────────────────────────────────────────────
+# Set these to your registry/image names after pushing the Docker images.
+# Example: registry: ghcr.io/your-org
+registry: ""
+
+backend:
+  image: oas-enhancer-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8000
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  # OpenAI / gateway config — set via --set or a secrets manager
+  env:
+    OPENAI_BASE_URL: "https://api.openai.com/v1"
+    SUGGESTER_MODEL: "gpt-4.1-mini"
+    BATCH_SIZE: "50"
+    BATCH_TOKENS: "32768"
+    POSTMAN_BATCH_SIZE: "2"
+    POSTMAN_TOKENS: "32768"
+
+  # OPENAI_API_KEY — injected from a Kubernetes Secret (see secret.yaml)
+  # Set secretName to an existing secret, or leave empty to create one
+  # from the openaiApiKey value below (not recommended for production).
+  existingSecret: ""   # name of an existing k8s Secret with key OPENAI_API_KEY
+  openaiApiKey: ""     # only used if existingSecret is empty
+
+  # Persistent storage for logs and cache
+  persistence:
+    logs:
+      enabled: true
+      size: 1Gi
+      storageClass: ""   # leave empty to use cluster default
+    cache:
+      enabled: true
+      size: 2Gi
+      storageClass: ""
+
+ui:
+  image: oas-enhancer-ui
+  tag: latest
+  pullPolicy: IfNotPresent
+  replicas: 1
+  port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  env:
+    REDUNDANCY_UTIL_URL: "#"
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  host: oas-enhancer.example.com
+  # annotations:
+  #   kubernetes.io/ingress.class: nginx
+  tls:
+    enabled: false
+    secretName: oas-enhancer-tls

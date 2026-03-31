@@ -1,0 +1,325 @@
+openapi: "3.0.3"
+info:
+  title: Schema Composition Test API
+  version: "1.0.0"
+paths:
+
+  # ── Simple allOf: extend a base schema ──────────────────────────────────────
+  /animals:
+    post:
+      operationId: createAnimal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/BaseAnimal'
+                - type: object
+                  properties:
+                    species:
+                      type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseAnimal'
+
+  # ── oneOf with discriminator ─────────────────────────────────────────────────
+  /shapes:
+    post:
+      operationId: createShape
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Circle'
+                - $ref: '#/components/schemas/Rectangle'
+                - $ref: '#/components/schemas/Triangle'
+              discriminator:
+                propertyName: shapeType
+                mapping:
+                  circle: '#/components/schemas/Circle'
+                  rectangle: '#/components/schemas/Rectangle'
+                  triangle: '#/components/schemas/Triangle'
+      responses:
+        "201":
+          description: Created
+
+  # ── anyOf: flexible input ────────────────────────────────────────────────────
+  /notifications:
+    post:
+      operationId: sendNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/EmailNotification'
+                - $ref: '#/components/schemas/SmsNotification'
+                - $ref: '#/components/schemas/PushNotification'
+      responses:
+        "202":
+          description: Accepted
+
+  # ── Complex: allOf + oneOf nested, discriminator on inner type ───────────────
+  /payments:
+    post:
+      operationId: processPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/BasePayment'
+                - type: object
+                  required:
+                    - method
+                  properties:
+                    method:
+                      oneOf:
+                        - $ref: '#/components/schemas/CardPayment'
+                        - $ref: '#/components/schemas/BankTransfer'
+                        - $ref: '#/components/schemas/CryptoPayment'
+                      discriminator:
+                        propertyName: type
+      responses:
+        "200":
+          description: Payment processed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BasePayment'
+                  - type: object
+                    properties:
+                      transactionId:
+                        type: string
+                      status:
+                        type: string
+                        enum: [pending, completed, failed]
+
+  # ── Complex: anyOf in response with inline + $ref mixed ─────────────────────
+  /search:
+    get:
+      operationId: search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      anyOf:
+                        - $ref: '#/components/schemas/ProductResult'
+                        - $ref: '#/components/schemas/UserResult'
+                        - type: object
+                          properties:
+                            type:
+                              type: string
+                              enum: [unknown]
+                            raw:
+                              type: object
+
+components:
+  schemas:
+
+    BaseAnimal:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Circle:
+      type: object
+      required:
+        - shapeType
+        - radius
+      properties:
+        shapeType:
+          type: string
+          enum: [circle]
+        radius:
+          type: number
+
+    Rectangle:
+      type: object
+      required:
+        - shapeType
+        - width
+        - height
+      properties:
+        shapeType:
+          type: string
+          enum: [rectangle]
+        width:
+          type: number
+        height:
+          type: number
+
+    Triangle:
+      type: object
+      required:
+        - shapeType
+        - base
+        - height
+      properties:
+        shapeType:
+          type: string
+          enum: [triangle]
+        base:
+          type: number
+        height:
+          type: number
+
+    EmailNotification:
+      type: object
+      required:
+        - to
+        - subject
+        - body
+      properties:
+        to:
+          type: string
+          format: email
+        subject:
+          type: string
+        body:
+          type: string
+
+    SmsNotification:
+      type: object
+      required:
+        - phoneNumber
+        - message
+      properties:
+        phoneNumber:
+          type: string
+        message:
+          type: string
+          maxLength: 160
+
+    PushNotification:
+      type: object
+      required:
+        - deviceToken
+        - title
+      properties:
+        deviceToken:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+
+    BasePayment:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+
+    CardPayment:
+      type: object
+      required:
+        - type
+        - cardNumber
+        - expiry
+        - cvv
+      properties:
+        type:
+          type: string
+          enum: [card]
+        cardNumber:
+          type: string
+          pattern: "^[0-9]{16}$"
+        expiry:
+          type: string
+          pattern: "^(0[1-9]|1[0-2])\\/[0-9]{2}$"
+        cvv:
+          type: string
+          pattern: "^[0-9]{3,4}$"
+
+    BankTransfer:
+      type: object
+      required:
+        - type
+        - accountNumber
+        - routingNumber
+      properties:
+        type:
+          type: string
+          enum: [bank]
+        accountNumber:
+          type: string
+        routingNumber:
+          type: string
+
+    CryptoPayment:
+      type: object
+      required:
+        - type
+        - walletAddress
+        - coin
+      properties:
+        type:
+          type: string
+          enum: [crypto]
+        walletAddress:
+          type: string
+        coin:
+          type: string
+          enum: [BTC, ETH, USDC]
+
+    ProductResult:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [product]
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+
+    UserResult:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [user]
+        id:
+          type: string
+        username:
+          type: string

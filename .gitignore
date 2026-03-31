@@ -208,8 +208,13 @@ __marimo__/
 frontend/node_modules/
 backend/.adk/
 backend/.venv/
+.claude/
 backend/__pycache__/
 backend/Include/
 backend/Lib/
 backend/Scripts/
 backend/tools/__pycache__/
+frontend/.next/
+frontend/.env.example
+logs/*.log
+.cache/

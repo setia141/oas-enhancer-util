@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oas-enhancer.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oas-enhancer.labels" . | nindent 4 }}
+    {{- include "oas-enhancer.ui.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.ui.replicas }}
+  selector:
+    matchLabels:
+      {{- include "oas-enhancer.ui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oas-enhancer.labels" . | nindent 8 }}
+        {{- include "oas-enhancer.ui.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: ui
+          image: {{ include "oas-enhancer.ui.image" . }}
+          imagePullPolicy: {{ .Values.ui.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ui.port }}
+          env:
+            # Backend URL points to the backend ClusterIP service
+            - name: BACKEND_URL
+              value: "http://{{ include "oas-enhancer.fullname" . }}-backend:{{ .Values.backend.port }}"
+            {{- range $key, $val := .Values.ui.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.ui.resources | nindent 12 }}

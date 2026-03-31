@@ -1,0 +1,290 @@
+{
+  "info": {
+    "name": "Order Management API",
+    "_postman_id": "complex-test-001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order - Success",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"cust_abc123\",\n  \"items\": [{\"product_id\": \"prod_001\", \"quantity\": 2}],\n  \"shipping_address\": {\"street\": \"123 Main St\", \"city\": \"London\", \"country\": \"GB\"},\n  \"promo_code\": \"SAVE10\",\n  \"notes\": \"Leave at door\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "code": 201,
+              "status": "Created",
+              "body": "{\n  \"id\": \"ord_xyz789\",\n  \"status\": \"pending\",\n  \"total\": 49.98,\n  \"currency\": \"GBP\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"estimatedDelivery\": \"2024-01-18\",\n  \"trackingNumber\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Order - Missing Fields",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"cust_abc123\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "422 Validation Error",
+              "code": 422,
+              "status": "Unprocessable Entity",
+              "body": "{\n  \"error\": \"Validation failed\",\n  \"details\": [{\"field\": \"items\", \"message\": \"items is required\"}]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Order - Unauthorized",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders" },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "response": [
+            {
+              "name": "401 Unauthorized",
+              "code": 401,
+              "status": "Unauthorized",
+              "body": "{\n  \"error\": \"Unauthorized\",\n  \"message\": \"Invalid or expired token\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders?status=pending&page=1" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"orders\": [],\n  \"total\": 0,\n  \"page\": 1,\n  \"pageSize\": 20,\n  \"hasMore\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Order - Found",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/ord_xyz789" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"ord_xyz789\",\n  \"status\": \"confirmed\",\n  \"customer_id\": \"cust_abc123\",\n  \"total\": 49.98,\n  \"currency\": \"GBP\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"updatedAt\": \"2024-01-15T11:00:00Z\",\n  \"items\": [{\"product_id\": \"prod_001\", \"quantity\": 2, \"unitPrice\": 24.99}],\n  \"shippingAddress\": {\"street\": \"123 Main St\", \"city\": \"London\", \"country\": \"GB\"}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Order - Not Found",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/ord_notexist" }
+          },
+          "response": [
+            {
+              "name": "404 Not Found",
+              "code": 404,
+              "status": "Not Found",
+              "body": "{\n  \"error\": \"Order not found\",\n  \"code\": \"ORDER_NOT_FOUND\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/orders/ord_xyz789" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\",\n  \"updatedBy\": \"admin_user_001\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"ord_xyz789\",\n  \"status\": \"confirmed\",\n  \"updatedAt\": \"2024-01-15T11:00:00Z\",\n  \"updatedBy\": \"admin_user_001\"\n}"
+            },
+            {
+              "name": "400 Invalid Status",
+              "code": 400,
+              "status": "Bad Request",
+              "body": "{\n  \"error\": \"Invalid status transition\",\n  \"from\": \"delivered\",\n  \"to\": \"pending\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order - With Reason",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders/ord_xyz789/cancel" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer requested cancellation\",\n  \"refund\": true,\n  \"notifyCustomer\": true\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 Cancelled",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"ord_xyz789\",\n  \"status\": \"cancelled\",\n  \"cancelledAt\": \"2024-01-15T12:00:00Z\",\n  \"refundId\": \"ref_abc001\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Order - Already Cancelled",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders/ord_xyz789/cancel" },
+            "body": { "mode": "raw", "raw": "{\"reason\": \"duplicate\"}" }
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "code": 409,
+              "status": "Conflict",
+              "body": "{\n  \"error\": \"Order already cancelled\",\n  \"orderId\": \"ord_xyz789\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products - All",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"products\": [],\n  \"total\": 0,\n  \"page\": 1,\n  \"pageSize\": 50\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Products - By Category",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products?category=electronics&in_stock=true" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"products\": [{\"id\": \"prod_001\", \"name\": \"Laptop\", \"price\": 999.99, \"stock\": 5, \"category\": \"electronics\", \"sku\": \"LAP-001\"}],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 50\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/prod_001" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"prod_001\",\n  \"name\": \"Laptop\",\n  \"price\": 999.99,\n  \"stock\": 5,\n  \"category\": \"electronics\",\n  \"sku\": \"LAP-001\",\n  \"description\": \"High performance laptop\",\n  \"images\": [\"https://cdn.example.com/laptop.jpg\"],\n  \"createdAt\": \"2024-01-01T00:00:00Z\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "code": 404,
+              "status": "Not Found",
+              "body": "{\n  \"error\": \"Product not found\",\n  \"productId\": \"prod_001\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/customers" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane.doe@company.com\",\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+44-7700-900000\",\n  \"tier\": \"premium\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "code": 201,
+              "status": "Created",
+              "body": "{\n  \"id\": \"cust_abc123\",\n  \"email\": \"jane.doe@company.com\",\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+44-7700-900000\",\n  \"tier\": \"premium\",\n  \"createdAt\": \"2024-01-15T09:00:00Z\"\n}"
+            },
+            {
+              "name": "409 Duplicate Email",
+              "code": 409,
+              "status": "Conflict",
+              "body": "{\n  \"error\": \"Email already registered\",\n  \"email\": \"jane.doe@company.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Customer",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/customers/cust_abc123" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"cust_abc123\",\n  \"email\": \"jane.doe@company.com\",\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+44-7700-900000\",\n  \"tier\": \"premium\",\n  \"totalOrders\": 12,\n  \"totalSpend\": 1249.87,\n  \"createdAt\": \"2024-01-15T09:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Customer Orders",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/customers/cust_abc123/orders" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"orders\": [{\"id\": \"ord_xyz789\", \"status\": \"delivered\", \"total\": 49.98, \"createdAt\": \"2024-01-15T10:30:00Z\"}],\n  \"total\": 1\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

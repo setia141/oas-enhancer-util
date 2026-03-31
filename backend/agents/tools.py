@@ -1,109 +1,92 @@
 """
-Shared ADK tools that read/write OAS content via session state.
-
-Passing the OAS spec through session state (not message text) avoids
-ADK's template substitution which breaks on path params like {id}.
+OpenAI function tool schemas.
 """
-import json
-from google.adk.tools.tool_context import ToolContext
 
-# ── Session state keys ────────────────────────────────────────────
-SPEC_KEY         = "current_spec"
-POSTMAN_KEY      = "postman_json"
-HAS_POSTMAN_KEY  = "has_postman"
-SUGGESTIONS_KEY  = "review_suggestions"
-SATISFIED_KEY    = "review_satisfied"
-SUMMARY_KEY      = "review_summary"
-CHANGES_KEY      = "last_changes"
-ITERATIONS_KEY   = "iterations_data"
-
-
-# ── Shared tools ──────────────────────────────────────────────────
-
-def get_oas_spec(tool_context: ToolContext) -> str:
-    """Retrieve the current OAS specification from session state."""
-    spec = tool_context.state.get(SPEC_KEY, {})
-    return json.dumps(spec, indent=2)
-
-
-def get_postman_collection(tool_context: ToolContext) -> str:
-    """Retrieve the Postman collection from session state, if provided."""
-    postman = tool_context.state.get(POSTMAN_KEY)
-    if not postman:
-        return "No Postman collection was provided."
-    return postman
-
-
-def get_breaking_changes_policy(tool_context: ToolContext) -> str:
-    """Return the breaking-changes policy based on whether a Postman collection is available."""
-    if tool_context.state.get(HAS_POSTMAN_KEY, False):
-        return (
-            "A Postman collection IS available. Breaking changes ARE allowed — "
-            "align the spec with the Postman collection if responses or schemas differ."
-        )
-    return (
-        "NO Postman collection is available. Breaking changes are NOT allowed. "
-        "Only additive improvements: add examples, descriptions, new error responses, etc."
-    )
-
-
-# ── Reviewer-only tool ────────────────────────────────────────────
-
-def submit_review(
-    satisfied: bool,
-    summary: str,
-    suggestions: list[str],
-    tool_context: ToolContext,
-) -> str:
-    """
-    Submit the review result. Call this once after completing your review.
-
-    Args:
-        satisfied: True if the spec needs no further improvements.
-        summary: Brief description of what was found / overall state of the spec.
-        suggestions: List of specific, actionable improvement instructions.
-    """
-    tool_context.state[SATISFIED_KEY] = satisfied
-    tool_context.state[SUMMARY_KEY]   = summary
-    tool_context.state[SUGGESTIONS_KEY] = suggestions if not satisfied else []
-
-    if satisfied or not suggestions:
-        return f"Review complete — spec is satisfactory. {summary}"
-    return f"Review submitted: {len(suggestions)} suggestions recorded."
-
-
-# ── Enhancer-only tools ───────────────────────────────────────────
-
-def get_review_suggestions(tool_context: ToolContext) -> str:
-    """Retrieve the reviewer's suggestions that must be applied to the spec."""
-    suggestions = tool_context.state.get(SUGGESTIONS_KEY, [])
-    if not suggestions:
-        return "No suggestions found — nothing to apply."
-    return json.dumps(suggestions, indent=2)
-
-
-def save_enhanced_spec(
-    enhanced_spec: dict,
-    changes_made: list[str],
-    tool_context: ToolContext,
-) -> str:
-    """
-    Save the fully enhanced OAS specification back to session state.
-
-    Args:
-        enhanced_spec: The complete enhanced OAS 3.x object (not a partial update).
-        changes_made: Human-readable list of every change applied in this iteration.
-    """
-    tool_context.state[SPEC_KEY]    = enhanced_spec
-    tool_context.state[CHANGES_KEY] = changes_made
-
-    # Append iteration record
-    iterations: list = tool_context.state.get(ITERATIONS_KEY, [])
-    iterations.append({
-        "review_summary": tool_context.state.get(SUMMARY_KEY, ""),
-        "suggestions":    tool_context.state.get(SUGGESTIONS_KEY, []),
-        "changes_made":   changes_made,
-    })
-    tool_context.state[ITERATIONS_KEY] = iterations
-
-    return f"Enhanced spec saved — {len(changes_made)} changes applied."
+SUGGESTER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_suggestions",
+            "description": "Submit a list of suggested improvements for the OAS specification.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "suggestions": {
+                        "type": "array",
+                        "description": "List of suggested field additions or updates. Each item targets one specific field.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "The API path, e.g. /users/{id}. MUST be empty string '' for info-level or component suggestions.",
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "description": (
+                                        "HTTP method lowercase (get, post, put, patch, delete). "
+                                        "Use 'component' for component schema suggestions. "
+                                        "Use 'info' for spec-level info.description."
+                                    ),
+                                },
+                                "location": {
+                                    "type": "string",
+                                    "description": (
+                                        "CRITICAL: Copy the location EXACTLY as given in the gap list. Never set to null. "
+                                        "The location already includes the field name at the end — do not shorten it. "
+                                        "Examples: "
+                                        "'description' — operation or info-level description; "
+                                        "'parameters.0.description' — first parameter description; "
+                                        "'parameters.0.schema.example' — first parameter example (ends in .example); "
+                                        "'requestBody.description' — request body description; "
+                                        "'requestBody.content.application/json.schema.example' — request body example; "
+                                        "'requestBody.content.application/json.schema.required' — required fields array; "
+                                        "'responses.200.description' — response description; "
+                                        "'responses.400' — full error response object (Postman rule 2); "
+                                        "'responses.200.content.application/json.schema.example' — response example; "
+                                        "'x-ai' — full x-ai object; "
+                                        "'x-ai.when-to-use-me' — single x-ai sub-tag; "
+                                        "'x-ai.how-to-use-me' — single x-ai sub-tag; "
+                                        "'x-ai.trigger-me-command' — single x-ai sub-tag; "
+                                        "'schemas.MySchema.description' — component schema description (method=component, path=''); "
+                                        "'schemas.MySchema.example' — component schema example (method=component, path='', ends in .example); "
+                                        "'schemas.MySchema.properties.fieldName.description' — component property description (method=component, path=''); "
+                                        "'schemas.MySchema.properties.fieldName.example' — component property example (method=component, path='', ends in .example). "
+                                        "NEVER put 'components/schemas/...' in path — path must be empty string for components. "
+                                        "For Postman missing property: location ends at the property name, "
+                                        "e.g. 'requestBody.content.application/json.schema.properties.role'."
+                                    ),
+                                },
+                                "field": {
+                                    "type": "string",
+                                    "enum": ["description", "example", "x-ai", "schema_property"],
+                                    "description": (
+                                        "'description' — text description field. "
+                                        "'example' — example value field. "
+                                        "'x-ai' — x-ai extension field or sub-tag (when-to-use-me / how-to-use-me / trigger-me-command). "
+                                        "'schema_property' — used for Postman findings: missing properties, "
+                                        "type corrections, error response schemas, required arrays. "
+                                        "For schema_property the value must be a complete object."
+                                    ),
+                                },
+                                "value": {
+                                    "description": (
+                                        "The suggested value. "
+                                        "String for description or x-ai sub-tags. "
+                                        "Any valid JSON value for example. "
+                                        "Complete x-ai object {when-to-use-me, how-to-use-me, trigger-me-command} when location is 'x-ai'. "
+                                        "Complete schema object {type, description, example} for schema_property. "
+                                        "Complete response object {description, content} for error response schema_property. "
+                                        "Full array [field1, field2] for required array schema_property."
+                                    ),
+                                },
+                            },
+                            "required": ["path", "method", "location", "field", "value"],
+                        },
+                    },
+                },
+                "required": ["suggestions"],
+            },
+        },
+    }
+]

@@ -1,0 +1,37 @@
+{{- if .Values.backend.persistence.logs.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "oas-enhancer.fullname" . }}-logs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oas-enhancer.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.backend.persistence.logs.size }}
+  {{- if .Values.backend.persistence.logs.storageClass }}
+  storageClassName: {{ .Values.backend.persistence.logs.storageClass }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.backend.persistence.cache.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "oas-enhancer.fullname" . }}-cache
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oas-enhancer.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.backend.persistence.cache.size }}
+  {{- if .Values.backend.persistence.cache.storageClass }}
+  storageClassName: {{ .Values.backend.persistence.cache.storageClass }}
+  {{- end }}
+{{- end }}

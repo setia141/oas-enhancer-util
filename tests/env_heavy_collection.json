@@ -1,0 +1,264 @@
+{
+  "info": {
+    "name": "Env-Heavy Collection (Real-World Style)",
+    "_postman_id": "env-heavy-001",
+    "description": "Simulates a realistic enterprise Postman collection with environments, variables, auth tokens, and pre-request scripts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",    "value": "https://api.example.com",  "type": "string" },
+    { "key": "version",    "value": "v1",                       "type": "string" },
+    { "key": "tenantId",   "value": "tenant_corp_001",          "type": "string" },
+    { "key": "authToken",  "value": "",                         "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Pre-request: refresh token if expired",
+          "const token = pm.environment.get('authToken');",
+          "if (!token) {",
+          "    pm.sendRequest({ url: pm.environment.get('tokenUrl') + '/token', ... });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Orders (versioned path)",
+      "item": [
+        {
+          "name": "POST /orders — Success (baseUrl + version in path)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('orderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "X-Tenant-ID",  "value": "{{tenantId}}" },
+              { "key": "X-Request-ID", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{testCustomerId}}\",\n  \"items\": [{\"product_id\": \"{{testProductId}}\", \"quantity\": 2}],\n  \"shipping_address\": {\"street\": \"{{testStreet}}\", \"city\": \"London\", \"country\": \"GB\"},\n  \"promo_code\": \"SAVE10\",\n  \"notes\": \"Leave at door\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {},
+              "code": 201,
+              "status": "Created",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"{{orderId}}\",\n  \"status\": \"pending\",\n  \"total\": 49.98,\n  \"currency\": \"GBP\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"estimatedDelivery\": \"2024-01-18\",\n  \"trackingNumber\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /orders — 422 Validation Error",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/orders" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{testCustomerId}}\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "422 Unprocessable",
+              "code": 422,
+              "status": "Unprocessable Entity",
+              "body": "{\n  \"error\": \"Validation failed\",\n  \"details\": [{\"field\": \"items\", \"message\": \"items is required\"}]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /orders/{orderId} — uses env var as path param",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"ord_xyz789\",\n  \"status\": \"confirmed\",\n  \"customer_id\": \"cust_abc123\",\n  \"total\": 49.98,\n  \"currency\": \"GBP\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"updatedAt\": \"2024-01-15T11:00:00Z\",\n  \"shippingAddress\": {\"street\": \"123 Main St\", \"city\": \"London\", \"country\": \"GB\"}\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "code": 404,
+              "status": "Not Found",
+              "body": "{\n  \"error\": \"Order not found\",\n  \"code\": \"ORDER_NOT_FOUND\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /orders/{orderId} — update status",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/orders/{{orderId}}" },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\",\n  \"updatedBy\": \"{{currentUserId}}\"\n}"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"{{orderId}}\",\n  \"status\": \"confirmed\",\n  \"updatedAt\": \"2024-01-15T11:00:00Z\",\n  \"updatedBy\": \"admin_user_001\"\n}"
+            },
+            {
+              "name": "400 Bad Request",
+              "code": 400,
+              "status": "Bad Request",
+              "body": "{\n  \"error\": \"Invalid status transition\",\n  \"from\": \"delivered\",\n  \"to\": \"pending\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "POST /customers — formdata body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/customers" },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "email",  "value": "{{testEmail}}",  "type": "text" },
+                { "key": "name",   "value": "{{testName}}",   "type": "text" },
+                { "key": "phone",  "value": "{{testPhone}}",  "type": "text" },
+                { "key": "tier",   "value": "premium",        "type": "text" },
+                { "key": "avatar", "value": "",               "type": "file", "disabled": true }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "code": 201,
+              "status": "Created",
+              "body": "{\n  \"id\": \"cust_abc123\",\n  \"email\": \"jane.doe@company.com\",\n  \"name\": \"Jane Doe\",\n  \"phone\": \"+44-7700-900000\",\n  \"tier\": \"premium\",\n  \"createdAt\": \"2024-01-15T09:00:00Z\"\n}"
+            },
+            {
+              "name": "409 Conflict",
+              "code": 409,
+              "status": "Conflict",
+              "body": "{\n  \"error\": \"Email already registered\",\n  \"email\": \"jane.doe@company.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /customers/{customerId} — env var as concrete ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/customers/{{testCustomerId}}" },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ]
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"cust_abc123\",\n  \"email\": \"jane.doe@company.com\",\n  \"name\": \"Jane Doe\",\n  \"tier\": \"premium\",\n  \"totalOrders\": 12,\n  \"totalSpend\": 1249.87,\n  \"createdAt\": \"2024-01-15T09:00:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "GET /products — url-encoded query params style",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?category={{testCategory}}&in_stock=true&page={{pageNum}}",
+              "query": [
+                { "key": "category", "value": "{{testCategory}}" },
+                { "key": "in_stock", "value": "true" },
+                { "key": "page",     "value": "{{pageNum}}" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"products\": [{\"id\": \"prod_001\", \"name\": \"Laptop\", \"price\": 999.99, \"stock\": 5, \"sku\": \"LAP-001\"}],\n  \"total\": 1,\n  \"page\": 1,\n  \"pageSize\": 50\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /products/{productId} — using dynamic var",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/{{latestProductId}}" }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "code": 200,
+              "status": "OK",
+              "body": "{\n  \"id\": \"prod_001\",\n  \"name\": \"Laptop\",\n  \"price\": 999.99,\n  \"stock\": 5,\n  \"category\": \"electronics\",\n  \"sku\": \"LAP-001\",\n  \"images\": [\"https://cdn.example.com/laptop.jpg\"]\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "code": 404,
+              "status": "Not Found",
+              "body": "{\n  \"error\": \"Product not found\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

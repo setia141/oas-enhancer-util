@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OAS Enhancer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+    /* Header */
+    #app-header { background:#fff; border-bottom:1px solid #e8eaed; padding:0 24px; display:flex; align-items:center; height:52px; position:sticky; top:0; z-index:200; }
+    #app-header .logo { font-size:18px; margin-right:8px; }
+    #app-header .title { font-weight:700; font-size:15px; }
+
+    /* Centered page wrapper (upload + loading) */
+    .page-center { display:flex; justify-content:center; padding:40px 16px; }
+
+    /* Upload card */
+    .upload-card { width:100%; max-width:540px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
+    .card-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:24px; color:#fff; }
+    .card-header h1 { font-size:18px; font-weight:700; }
+    .card-header p  { font-size:13px; opacity:.9; margin-top:4px; }
+    .card-body { padding:24px; }
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:8px; }
+    .field label .opt { font-weight:400; color:#888; }
+    .field label .req { color:#e53935; }
+    .dropzone { border:2px dashed #d0d5dd; border-radius:12px; padding:20px 16px; text-align:center; cursor:pointer; background:#fafafa; transition:all .2s; }
+    .dropzone:hover, .dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
+    .dropzone.has-file { border-color:#34a853; background:#e6f4ea; }
+    .dropzone .dz-icon  { font-size:26px; margin-bottom:6px; }
+    .dropzone .dz-label { font-weight:600; font-size:14px; color:#333; }
+    .dropzone .dz-hint  { font-size:12px; color:#888; margin-top:2px; }
+    .remove-btn  { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
+    .file-warn   { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
+    .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
+    .submit-btn  { width:100%; padding:12px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
+
+    /* Progress */
+    .progress-card { width:100%; max-width:440px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
+    .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
+    .progress-header h2 { font-weight:700; font-size:17px; }
+    .progress-header p  { font-size:13px; opacity:.9; margin-top:4px; }
+    .progress-body { padding:32px 24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
+    .spinner { width:44px; height:44px; border:4px solid #e8eaed; border-top-color:#4285f4; border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    .progress-status { font-size:14px; color:#555; }
+    .progress-timer  { font-size:13px; color:#999; }
+
+    /* ── Review ── */
+    .review-page { max-width:900px; margin:0 auto; padding:16px; }
+
+    /* Sticky toolbar */
+    .review-toolbar {
+      background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.1);
+      padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      margin-bottom:16px; position:sticky; top:52px; z-index:100;
+    }
+    .review-toolbar h2 { font-size:14px; font-weight:700; flex:1; min-width:100px; }
+    .tbar-stat  { font-size:12px; color:#666; white-space:nowrap; }
+    .tbar-btn   { padding:6px 12px; font-size:12px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; white-space:nowrap; }
+    .tbar-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; font-weight:600; }
+
+    /* Endpoint group */
+    .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:12px; overflow:hidden; }
+    .endpoint-header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:#f8f9fa; border-bottom:1px solid #e8eaed; flex-wrap:wrap; gap:8px; }
+    .method-badge { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; flex-shrink:0; }
+    .endpoint-path { font-size:13px; font-family:monospace; font-weight:600; flex:1; min-width:0; word-break:break-all; }
+    .group-stats { font-size:11px; color:#999; white-space:nowrap; }
+    .group-actions { display:flex; gap:6px; flex-shrink:0; }
+    .group-btn { padding:3px 10px; font-size:11px; border-radius:6px; border:1px solid; background:#fff; cursor:pointer; font-family:inherit; }
+    .group-btn.accept-all { color:#34a853; border-color:#34a853; }
+    .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
+
+    /* Suggestion row */
+    .suggestion-row { border-bottom:1px solid #f0f0f0; }
+    .suggestion-row:last-child { border-bottom:none; }
+    .sugg-card { padding:12px 16px; border-left:3px solid transparent; transition:background .15s; }
+    .suggestion-row.accepted .sugg-card { border-left-color:#34a853; background:#f6fef8; }
+    .suggestion-row.rejected .sugg-card { border-left-color:#ea4335; opacity:.5; }
+    .suggestion-row.edited   .sugg-card { border-left-color:#f4a234; background:#fffdf5; }
+
+    .sugg-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+    .sugg-field-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
+    .sugg-field-badge.description     { background:#e8f0fe; color:#1a73e8; }
+    .sugg-field-badge.example         { background:#e6f4ea; color:#34a853; }
+    .sugg-field-badge.x-ai            { background:#f3e8fd; color:#9334e6; }
+    .sugg-field-badge.schema_property { background:#fff3e0; color:#e65100; }
+    .sugg-location { font-size:11px; font-family:monospace; color:#888; word-break:break-all; }
+
+    .sugg-body { display:flex; align-items:flex-start; gap:12px; }
+    .sugg-main { flex:1; min-width:0; }
+    .sugg-value  { font-size:13px; color:#222; line-height:1.5; word-break:break-word; }
+    .sugg-reason { font-size:11px; color:#aaa; margin-top:3px; }
+    .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #f4a234; border-radius:6px; resize:vertical; min-height:44px; }
+
+    /* Inline YAML context */
+    .ctx-toggle { font-size:11px; color:#4285f4; background:none; border:none; cursor:pointer; padding:0; margin-top:6px; display:inline-block; }
+    .ctx-block  { margin-top:6px; background:#1e1e2e; border-radius:6px; overflow:auto; max-height:180px; padding:10px 12px; }
+    .ctx-line   { display:block; font-family:monospace; font-size:11px; line-height:1.6; white-space:pre; color:#cdd6f4; }
+    .ctx-line.ctx-inserted { color:#6ee7a0; background:rgba(52,168,83,.2); }
+
+    /* Action buttons */
+    .sugg-actions { display:flex; flex-direction:column; gap:5px; flex-shrink:0; padding-top:2px; }
+    .sugg-btn { padding:5px 12px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; background:#fff; min-width:76px; text-align:center; }
+    .sugg-btn.accept { color:#34a853; border-color:#34a853; }
+    .sugg-btn.accept.active { background:#34a853; color:#fff; }
+    .sugg-btn.edit   { color:#f4a234; border-color:#f4a234; }
+    .sugg-btn.edit.active   { background:#f4a234; color:#fff; }
+    .sugg-btn.reject { color:#ea4335; border-color:#ea4335; }
+    .sugg-btn.reject.active { background:#ea4335; color:#fff; }
+
+    /* ── Done ── */
+    .done-page { max-width:1000px; margin:0 auto; padding:16px; }
+    .done-header-bar { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); padding:12px 20px; display:flex; align-items:center; gap:12px; margin-bottom:0; flex-wrap:wrap; border-radius:12px 12px 0 0; border-bottom:1px solid #e8eaed; }
+    .done-title { font-size:15px; font-weight:700; color:#1a7340; flex:1; }
+    .done-meta  { font-size:13px; color:#666; }
+    .done-btn   { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; }
+    .done-btn.primary { background:#34a853; color:#fff; border-color:#34a853; font-weight:600; }
+    .done-tabs  { display:flex; background:#fff; border-bottom:2px solid #e8eaed; }
+    .done-tab   { padding:9px 20px; font-size:13px; font-weight:600; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; font-family:inherit; color:#666; }
+    .done-tab.active { color:#4285f4; border-bottom-color:#4285f4; }
+    .done-body  { background:#1e1e2e; border-radius:0 0 12px 12px; overflow:auto; max-height:calc(100vh - 220px); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+
+    /* Unified diff */
+    .diff-unified { padding:12px 0; }
+    .diff-line { display:flex; font-family:monospace; font-size:12px; line-height:1.65; }
+    .diff-line .dl-gutter { width:28px; flex-shrink:0; text-align:center; color:#555; user-select:none; border-right:1px solid #2a2a3e; padding-right:4px; }
+    .diff-line .dl-text   { flex:1; padding:0 12px; white-space:pre-wrap; word-break:break-all; color:#cdd6f4; }
+    .diff-line.dl-add    .dl-gutter { color:#6ee7a0; background:rgba(52,168,83,.12); }
+    .diff-line.dl-add    .dl-text   { background:rgba(52,168,83,.1); color:#6ee7a0; }
+    .diff-line.dl-remove .dl-gutter { color:#ff8a80; background:rgba(229,57,53,.12); }
+    .diff-line.dl-remove .dl-text   { background:rgba(229,57,53,.1); color:#ff8a80; }
+
+    .done-yaml-pre { margin:0; padding:16px 20px; font-size:12px; line-height:1.7; color:#cdd6f4; font-family:monospace; white-space:pre-wrap; word-break:break-all; }
+
+    /* Resume banner */
+    .resume-banner { display:none; margin-bottom:16px; background:#e8f0fe; border:1px solid #c5d8fc; border-radius:10px; padding:12px 14px; }
+    .resume-banner-title { font-size:13px; font-weight:600; color:#1a56db; margin-bottom:2px; }
+    .resume-banner-sub   { font-size:12px; color:#555; margin-bottom:10px; }
+    .resume-banner-btns  { display:flex; gap:8px; }
+    .resume-btn          { padding:6px 14px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; font-weight:600; }
+    .resume-btn.primary  { background:#4285f4; color:#fff; }
+    .resume-btn.secondary{ background:#fff; color:#666; border:1px solid #ddd; }
+
+    /* Save indicator */
+    #save-indicator { position:fixed; bottom:16px; right:16px; background:#222; color:#fff; font-size:12px; padding:6px 12px; border-radius:8px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999; }
+
+    /* Error */
+    .error-box { max-width:540px; margin:0 auto; padding:40px 16px; }
+    .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
+    .retry-btn  { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
+  </style>
+</head>
+<body>
+
+<header id="app-header">
+  <div class="logo">📄</div>
+  <div class="title">OAS Enhancer</div>
+</header>
+
+<!-- IDLE -->
+<div id="phase-idle" class="page-center">
+  <div class="upload-card">
+    <div class="card-header">
+      <h1>OAS Enhancer</h1>
+      <p>Upload your spec — review AI suggestions before anything is applied</p>
+    </div>
+    <div class="card-body">
+      <!-- Resume saved session banner -->
+      <div class="resume-banner" id="resume-banner">
+        <div class="resume-banner-title">📂 Saved session found</div>
+        <div class="resume-banner-sub" id="resume-banner-sub"></div>
+        <div class="resume-banner-btns">
+          <button class="resume-btn primary"   onclick="resumeSession()">Resume</button>
+          <button class="resume-btn secondary" onclick="discardSession()">Discard</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>OpenAPI Spec <span class="req">*</span></label>
+        <div id="dz-oas" class="dropzone"
+          ondragover="dzDragOver(event,'dz-oas')" ondragleave="dzDragLeave('dz-oas')"
+          ondrop="dzDrop(event,'dz-oas','oas')" onclick="document.getElementById('inp-oas').click()">
+          <div class="dz-icon">📋</div>
+          <div class="dz-label">OAS / Swagger file</div>
+          <div class="dz-hint">Drag &amp; drop or click to browse</div>
+        </div>
+        <input type="file" id="inp-oas" accept=".json,.yaml,.yml" style="display:none" onchange="dzFile(event,'dz-oas','oas')">
+        <div class="file-warn" id="oas-size-warn"></div>
+      </div>
+      <div class="field">
+        <label>Postman Collection <span class="opt"><strong>(Optional)</strong></span></label>
+        <div id="dz-postman" class="dropzone"
+          ondragover="dzDragOver(event,'dz-postman')" ondragleave="dzDragLeave('dz-postman')"
+          ondrop="dzDrop(event,'dz-postman','postman')" onclick="document.getElementById('inp-postman').click()">
+          <div class="dz-icon">📮</div>
+          <div class="dz-label">Postman Collection v2.1</div>
+          <div class="dz-hint">Drag &amp; drop or click to browse</div>
+        </div>
+        <input type="file" id="inp-postman" accept=".json" style="display:none" onchange="dzFile(event,'dz-postman','postman')">
+        <button class="remove-btn" id="remove-postman" style="display:none" onclick="removePostman()">✕ Remove</button>
+        <div style="margin:8px 0 0;padding:8px 10px;background:#fff8e1;border-left:3px solid #f59e0b;border-radius:3px;font-size:12px;color:#555;line-height:1.6;">
+          <strong>Try with just your OAS spec first.</strong> Add a Postman collection only if your
+          API Catalog OAS differs from actual API behaviour — e.g. missing fields, wrong types,
+          or undocumented error codes observed in real traffic.
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#666;margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" id="force-refresh"> Force refresh (ignore cache)
+      </label>
+      <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">✨ Get Suggestions</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="phase-running" class="page-center" style="display:none">
+  <div class="progress-card">
+    <div class="progress-header">
+      <h2>Analyzing your spec...</h2>
+      <p>AI is reviewing fields and generating suggestions</p>
+    </div>
+    <div class="progress-body">
+      <div class="spinner"></div>
+      <div class="progress-status" id="progress-status">Reviewing spec...</div>
+      <div class="progress-timer"  id="progress-timer">0s</div>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW -->
+<div id="phase-review" style="display:none">
+  <div class="review-page">
+    <div class="review-toolbar">
+      <h2>Review Suggestions</h2>
+      <span class="tbar-stat" id="tbar-stat"></span>
+      <button class="tbar-btn" onclick="acceptAll()">✓ Accept All</button>
+      <button class="tbar-btn" onclick="rejectAll()">✕ Reject All</button>
+      <button class="tbar-btn primary" id="apply-btn" onclick="applyAccepted()">Apply Accepted →</button>
+      <button class="tbar-btn" onclick="resetAll()">← New File</button>
+    </div>
+    <div id="review-body"></div>
+  </div>
+</div>
+
+<!-- DONE -->
+<div id="phase-done" style="display:none">
+  <div class="done-page">
+    <div class="done-header-bar">
+      <div class="done-title">✅ Enhancement Complete</div>
+      <div class="done-meta" id="result-meta"></div>
+      <button class="done-btn" onclick="backToReview()">← Back to Review</button>
+      <button class="done-btn" id="copy-btn" onclick="copyYaml()">📋 Copy</button>
+      <button class="done-btn primary" onclick="downloadYaml()">⬇ Download</button>
+      <button class="done-btn" onclick="resetAll()">← New File</button>
+    </div>
+    <div class="done-tabs">
+      <button class="done-tab active" id="tab-diff" onclick="switchTab('diff')">Diff View</button>
+      <button class="done-tab"        id="tab-yaml" onclick="switchTab('yaml')">Enhanced YAML</button>
+    </div>
+    <div class="done-body" id="done-body">
+      <div id="done-diff-content" class="diff-unified"></div>
+      <pre id="done-yaml-content" class="done-yaml-pre" style="display:none"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE INDICATOR -->
+<div id="save-indicator">Progress saved</div>
+
+<!-- ERROR -->
+<div id="phase-error" style="display:none" class="error-box">
+  <div class="error-msg" id="error-msg"></div>
+  <button class="retry-btn" onclick="resetAll()">Try Again</button>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let state = {
+  oasFile:      null,
+  postmanFile:  null,
+  spec:         null,
+  originalYaml: null,
+  suggestions:  [],
+}
+
+// ── Phase ──────────────────────────────────────────────────────────
+function showPhase(name) {
+  ['idle','running','review','done','error'].forEach(p => {
+    const el = document.getElementById('phase-' + p)
+    if (el) el.style.display = p === name ? '' : 'none'
+  })
+  window.scrollTo(0, 0)
+}
+
+let _timerInterval = null
+function _startTimer() {
+  clearInterval(_timerInterval)
+  const t0 = Date.now()
+  _timerInterval = setInterval(() => {
+    const el = document.getElementById('progress-timer')
+    if (el) el.textContent = Math.floor((Date.now() - t0) / 1000) + 's'
+  }, 1000)
+}
+
+function resetAll() {
+  clearInterval(_timerInterval)
+  clearProgress()
+  state = { oasFile:null, postmanFile:null, spec:null, originalYaml:null, suggestions:[] }
+  document.getElementById('inp-oas').value     = ''
+  document.getElementById('inp-postman').value = ''
+  dzReset('dz-oas',     '📋', 'OAS / Swagger file')
+  dzReset('dz-postman', '📮', 'Postman Collection v2.1')
+  document.getElementById('remove-postman').style.display = 'none'
+  document.getElementById('submit-btn').disabled = true
+  document.getElementById('review-body').innerHTML = ''
+  showPhase('idle')
+}
+
+// ── Dropzone ───────────────────────────────────────────────────────
+function dzDragOver(e,id){ e.preventDefault(); document.getElementById(id).classList.add('drag') }
+function dzDragLeave(id) { document.getElementById(id).classList.remove('drag') }
+function dzDrop(e,id,key){ e.preventDefault(); dzDragLeave(id); const f=e.dataTransfer.files[0]; if(f) setFile(id,key,f) }
+function dzFile(e,id,key){ const f=e.target.files[0]; if(f) setFile(id,key,f) }
+
+function setFile(id, key, file) {
+  if (key === 'oas') {
+    state.oasFile = file
+    if (file.size < 200) {
+      const w = document.getElementById('oas-size-warn')
+      w.className = 'file-warn error'
+      w.textContent = '⚠ File too small to be a valid OAS spec.'
+      w.style.display = ''
+      return
+    }
+    document.getElementById('oas-size-warn').style.display = 'none'
+    document.getElementById('submit-btn').disabled = false
+  } else {
+    state.postmanFile = file
+    document.getElementById('remove-postman').style.display = ''
+  }
+  const dz = document.getElementById(id)
+  dz.classList.remove('drag'); dz.classList.add('has-file')
+  dz.querySelector('.dz-icon').textContent  = '✅'
+  dz.querySelector('.dz-label').textContent = file.name
+  const hint = dz.querySelector('.dz-hint'); if (hint) hint.style.display = 'none'
+}
+
+function dzReset(id, icon, label) {
+  const dz = document.getElementById(id)
+  dz.classList.remove('has-file','drag')
+  dz.querySelector('.dz-icon').textContent  = icon
+  dz.querySelector('.dz-label').textContent = label
+  const hint = dz.querySelector('.dz-hint'); if (hint) hint.style.display = ''
+}
+
+function removePostman() {
+  state.postmanFile = null
+  document.getElementById('inp-postman').value = ''
+  document.getElementById('remove-postman').style.display = 'none'
+  dzReset('dz-postman', '📮', 'Postman Collection v2.1')
+}
+
+// ── Submit ─────────────────────────────────────────────────────────
+async function handleSubmit() {
+  if (!state.oasFile) return
+  document.getElementById('progress-status').textContent = 'Reviewing spec...'
+  document.getElementById('progress-timer').textContent  = '0s'
+  showPhase('running')
+  _startTimer()
+
+  const form = new FormData()
+  form.append('oas_file', state.oasFile)
+  if (state.postmanFile) form.append('postman_file', state.postmanFile)
+  if (document.getElementById('force-refresh').checked) form.append('force_refresh', 'true')
+
+  try {
+    const resp = await fetch('/suggest', { method:'POST', body:form })
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}))
+      throw new Error(err.detail || `Server error ${resp.status}`)
+    }
+    const reader  = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream:true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        let event; try { event = JSON.parse(line.slice(6)) } catch { continue }
+        handleEvent(event)
+      }
+    }
+  } catch(e) {
+    clearInterval(_timerInterval)
+    document.getElementById('error-msg').textContent = '⚠ ' + e.message
+    showPhase('error')
+  }
+}
+
+// ── SSE events ─────────────────────────────────────────────────────
+function handleEvent(event) {
+  if (event.type === 'heartbeat') {
+    document.getElementById('progress-status').textContent = 'Still reviewing — almost there...'
+    return
+  }
+  if (event.type === 'error') {
+    clearInterval(_timerInterval)
+    document.getElementById('error-msg').textContent = '⚠ ' + event.message
+    showPhase('error')
+    return
+  }
+  if (event.type === 'done') {
+    clearInterval(_timerInterval)
+    state.spec         = event.spec
+    state.originalYaml = event.original_yaml
+    // Deduplicate by path+method+location
+    const seen = new Set()
+    state.suggestions = event.suggestions
+      .filter(s => {
+        const key = `${s.method}::${s.path}::${s.location}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .map(s => ({ ...s, status: 'pending' }))
+    saveProgress()
+    renderReview()
+    showPhase('review')
+  }
+}
+
+// ── Review rendering ────────────────────────────────────────────────
+const METHOD_COLORS = {
+  get:'#34a853', post:'#4285f4', put:'#fbbc04',
+  patch:'#ff6d00', delete:'#e53935', component:'#9334e6'
+}
+
+function renderReview() {
+  updateToolbar()
+  // Safety: ensure apply button is never stuck in disabled state
+  const applyBtn = document.getElementById('apply-btn')
+  if (applyBtn) applyBtn.disabled = false
+  const body = document.getElementById('review-body')
+  body.innerHTML = ''
+
+  // Group by method+path
+  const groups = {}
+  state.suggestions.forEach((s, idx) => {
+    const key = s.method === 'component' ? `component::${s.path}` : `${s.method}::${s.path}`
+    if (!groups[key]) groups[key] = { path: s.path, method: s.method, items: [] }
+    groups[key].items.push({ ...s, idx })
+  })
+
+  for (const [, group] of Object.entries(groups)) {
+    const color   = METHOD_COLORS[group.method] || '#888'
+    const label   = group.method === 'component' ? 'COMP' : group.method.toUpperCase()
+    const safeId  = group.method + '-' + group.path.replace(/\//g,'_').replace(/[{}]/g,'')
+
+    const groupEl = document.createElement('div')
+    groupEl.className = 'endpoint-group'
+    groupEl.id = 'group-' + safeId
+    groupEl.innerHTML = `
+      <div class="endpoint-header">
+        <span class="method-badge" style="background:${color}">${escHtml(label)}</span>
+        <span class="endpoint-path">${escHtml(group.path)}</span>
+        <span class="group-stats" id="gstats-${safeId}"></span>
+        <div class="group-actions">
+          <button class="group-btn accept-all" onclick="acceptGroup('${escJs(group.method)}','${escJs(group.path)}')">Accept all</button>
+          <button class="group-btn reject-all" onclick="rejectGroup('${escJs(group.method)}','${escJs(group.path)}')">Reject all</button>
+        </div>
+      </div>
+      <div id="rows-${safeId}"></div>`
+    body.appendChild(groupEl)
+
+    const rowsEl = document.getElementById('rows-' + safeId)
+    group.items.forEach(item => rowsEl.appendChild(buildSuggRow(item.idx)))
+    updateGroupStats(group.items[0].idx)  // init stats label
+  }
+}
+
+function buildSuggRow(idx) {
+  const s      = state.suggestions[idx]
+  const status = s.status
+  const row    = document.createElement('div')
+  row.className = 'suggestion-row ' + status
+  row.id = 'sugg-row-' + idx
+
+  const displayVal = s.editedValue !== undefined ? s.editedValue : s.value
+  const valueText = (displayVal !== null && typeof displayVal === 'object')
+    ? JSON.stringify(displayVal, null, 2)
+    : String(displayVal ?? '')
+
+  // Inline YAML context block
+  let ctxHtml = ''
+  const ctx = s.yaml_context
+  if (ctx && ctx.context_lines && ctx.context_lines.length) {
+    const linesHtml = ctx.context_lines.map(l =>
+      `<span class="ctx-line">${escHtml(l)}</span>`
+    ).join('') + (ctx.inserted_line
+      ? `<span class="ctx-line ctx-inserted">+ ${escHtml(ctx.inserted_line)}</span>`
+      : '')
+    ctxHtml = `<button class="ctx-toggle" onclick="toggleCtx(${idx},this)">▶ Show context</button>
+               <div class="ctx-block" id="ctx-${idx}" style="display:none">${linesHtml}</div>`
+  }
+
+  const editHidden = status === 'edited' ? '' : 'display:none'
+  const _rawEdit   = s.editedValue !== undefined ? s.editedValue : s.value
+  const editVal    = escHtml((_rawEdit !== null && typeof _rawEdit === 'object')
+    ? JSON.stringify(_rawEdit, null, 2)
+    : String(_rawEdit ?? ''))
+
+  row.innerHTML = `
+    <div class="sugg-card">
+      <div class="sugg-top">
+        <span class="sugg-field-badge ${escHtml(s.field)}">${escHtml(s.field)}</span>
+        <span class="sugg-location">${escHtml(s.location)}</span>
+      </div>
+      <div class="sugg-body">
+        <div class="sugg-main">
+          <div class="sugg-value">${escHtml(valueText)}</div>
+          ${s.reason ? `<div class="sugg-reason">${escHtml(s.reason)}</div>` : ''}
+          <textarea class="sugg-edit-area" id="edit-${idx}" style="${editHidden}"
+            oninput="updateEdit(${idx},this.value)">${editVal}</textarea>
+          ${ctxHtml}
+        </div>
+        <div class="sugg-actions">
+          <button class="sugg-btn accept ${['accepted','edited'].includes(status) ? 'active' : ''}"
+            onclick="setSuggStatus(${idx},'accepted')">✓ Accept</button>
+          <button class="sugg-btn edit ${status === 'edited' ? 'active' : ''}"
+            onclick="toggleEdit(${idx})">✎ Edit</button>
+          <button class="sugg-btn reject ${status === 'rejected' ? 'active' : ''}"
+            onclick="setSuggStatus(${idx},'rejected')">✕ Reject</button>
+        </div>
+      </div>
+    </div>`
+  return row
+}
+
+function toggleCtx(idx, btn) {
+  const el     = document.getElementById('ctx-' + idx)
+  const hidden = el.style.display === 'none'
+  el.style.display = hidden ? '' : 'none'
+  btn.textContent  = hidden ? '▼ Hide context' : '▶ Show context'
+}
+
+function refreshRow(idx) {
+  const el = document.getElementById('sugg-row-' + idx)
+  if (el) el.replaceWith(buildSuggRow(idx))
+}
+
+function _captureEditValue(idx) {
+  const ta = document.getElementById('edit-' + idx)
+  if (ta) state.suggestions[idx].editedValue = ta.value
+}
+
+function setSuggStatus(idx, newStatus) {
+  _captureEditValue(idx)
+  state.suggestions[idx].status = newStatus
+  refreshRow(idx)
+  updateToolbar()
+  updateGroupStats(idx)
+  saveProgress()
+}
+
+function toggleEdit(idx) {
+  _captureEditValue(idx)
+  const s = state.suggestions[idx]
+  s.status = s.status === 'edited' ? 'accepted' : 'edited'
+  if (s.status === 'edited') s.editedValue = s.editedValue ?? s.value
+  refreshRow(idx)
+  updateToolbar()
+  updateGroupStats(idx)
+  saveProgress()
+}
+
+function updateEdit(idx, val) {
+  state.suggestions[idx].editedValue = val
+  // Update the value display in real-time so the user sees the change immediately
+  const valueDiv = document.querySelector('#sugg-row-' + idx + ' .sugg-value')
+  if (valueDiv) valueDiv.textContent = val
+  saveProgress()
+}
+
+function acceptAll() {
+  state.suggestions.forEach((s, idx) => { if (s.status === 'edited') _captureEditValue(idx) })
+  state.suggestions.forEach(s => { if (s.status !== 'rejected') s.status = 'accepted' })
+  renderReview(); saveProgress()
+}
+
+function rejectAll() {
+  state.suggestions.forEach((s, idx) => { if (s.status === 'edited') _captureEditValue(idx) })
+  state.suggestions.forEach(s => s.status = 'rejected')
+  renderReview(); saveProgress()
+}
+
+function acceptGroup(method, path) {
+  state.suggestions.forEach(s => { if (s.path === path && s.method === method) s.status = 'accepted' })
+  renderReview(); saveProgress()
+}
+
+function rejectGroup(method, path) {
+  state.suggestions.forEach(s => { if (s.path === path && s.method === method) s.status = 'rejected' })
+  renderReview(); saveProgress()
+}
+
+function updateGroupStats(idx) {
+  const s     = state.suggestions[idx]
+  const safeId = s.method + '-' + s.path.replace(/\//g,'_').replace(/[{}]/g,'')
+  const grp    = state.suggestions.filter(sg => sg.path === s.path && sg.method === s.method)
+  const accepted = grp.filter(sg => ['accepted','edited'].includes(sg.status)).length
+  const pending  = grp.filter(sg => sg.status === 'pending').length
+  const el = document.getElementById('gstats-' + safeId)
+  if (el) el.textContent = `${accepted} accepted · ${pending} pending`
+}
+
+function updateToolbar() {
+  const total    = state.suggestions.length
+  const accepted = state.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length
+  const rejected = state.suggestions.filter(s => s.status === 'rejected').length
+  const pending  = total - accepted - rejected
+  document.getElementById('tbar-stat').textContent =
+    `${total} total · ${accepted} accepted · ${rejected} rejected · ${pending} pending`
+  document.getElementById('apply-btn').textContent = `Apply ${accepted} →`
+}
+
+// ── Apply ──────────────────────────────────────────────────────────
+async function applyAccepted() {
+  const accepted = state.suggestions
+    .filter(s => ['accepted','edited'].includes(s.status))
+    .map(s => {
+      // editedValue always wins if the user touched the textarea, regardless of current status
+      let value = s.editedValue !== undefined ? s.editedValue : s.value
+      // parse JSON strings back to objects for fields that expect objects
+      if ((s.field === 'schema_property' || s.field === 'x-ai') && typeof value === 'string') {
+        try { value = JSON.parse(value) } catch { /* keep as string */ }
+      }
+      return { path: s.path, method: s.method, location: s.location, field: s.field, value }
+    })
+
+  if (!accepted.length) {
+    alert('No accepted suggestions to apply.')
+    return
+  }
+
+  const applyBtn = document.getElementById('apply-btn')
+  applyBtn.textContent = 'Applying...'
+  applyBtn.disabled    = true
+
+  try {
+    const resp = await fetch('/apply', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ spec: state.spec, accepted }),
+    })
+    const data = await resp.json()
+    if (!resp.ok) throw new Error(data.detail || 'Apply failed')
+    clearProgress()
+    renderDone(data, accepted.length)
+    showPhase('done')
+    switchTab('diff')
+  } catch(e) {
+    alert('⚠ ' + e.message)
+    applyBtn.textContent = `Apply ${accepted.length} →`
+    applyBtn.disabled    = false
+  }
+}
+
+// ── Done view ──────────────────────────────────────────────────────
+let _finalYaml    = null
+let _originalYaml = null
+
+function switchTab(tab) {
+  const isDiff = tab === 'diff'
+  document.getElementById('done-diff-content').style.display = isDiff ? '' : 'none'
+  document.getElementById('done-yaml-content').style.display = isDiff ? 'none' : ''
+  document.getElementById('tab-diff').classList.toggle('active',  isDiff)
+  document.getElementById('tab-yaml').classList.toggle('active', !isDiff)
+}
+
+function _lcs(a, b) {
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1))
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1])
+  const res = []
+  let i = 0, j = 0
+  while (i < m || j < n) {
+    if (i < m && j < n && a[i] === b[j]) { res.push({ type:'equal',  line:a[i] }); i++; j++ }
+    else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) { res.push({ type:'add',    line:b[j] }); j++ }
+    else { res.push({ type:'remove', line:a[i] }); i++ }
+  }
+  return res
+}
+
+function diffLines(a, b) {
+  const CHUNK = 400   // lines per chunk — keeps memory bounded on large specs
+  const m = a.length, n = b.length
+
+  // For small specs run LCS directly
+  if (m <= CHUNK && n <= CHUNK) return _lcs(a, b)
+
+  // For large specs: split both into chunks by index ratio and diff each chunk.
+  // This is approximate (may miss cross-chunk moves) but is correct for the
+  // common case where suggestions add lines near their insertion point.
+  const res = []
+  const ratio = n / (m || 1)
+  let ai = 0, bi = 0
+  while (ai < m || bi < n) {
+    const aEnd = Math.min(ai + CHUNK, m)
+    const bEnd = Math.min(bi + CHUNK, n)
+    const chunk = _lcs(a.slice(ai, aEnd), b.slice(bi, bEnd))
+    res.push(...chunk)
+    ai = aEnd
+    bi = bEnd
+  }
+  return res
+}
+
+function renderDone(data, appliedCount) {
+  const failures = data.failed > 0 ? ` · ${data.failed} failed` : ''
+  document.getElementById('result-meta').textContent = `${appliedCount} changes applied${failures}`
+
+  _finalYaml    = data.spec_yaml     || ''
+  _originalYaml = data.original_yaml || ''
+
+  // Enhanced YAML tab
+  document.getElementById('done-yaml-content').textContent = _finalYaml
+
+  // Unified diff — build HTML
+  const diff = diffLines(_originalYaml.split('\n'), _finalYaml.split('\n'))
+  let html = ''
+  diff.forEach(d => {
+    const cls  = d.type === 'add' ? 'dl-add' : d.type === 'remove' ? 'dl-remove' : ''
+    const sign = d.type === 'add' ? '+' : d.type === 'remove' ? '-' : ' '
+    html += `<div class="diff-line ${cls}"><span class="dl-gutter">${sign}</span><span class="dl-text">${escHtml(d.line)}</span></div>`
+  })
+  document.getElementById('done-diff-content').innerHTML = html
+}
+
+function backToReview() {
+  // Re-enable apply button in case it was disabled
+  const btn = document.getElementById('apply-btn')
+  btn.disabled    = false
+  btn.textContent = `Apply ${state.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length} →`
+  renderReview()
+  showPhase('review')
+}
+
+function copyYaml() {
+  navigator.clipboard.writeText(_finalYaml || '')
+  const btn = document.getElementById('copy-btn')
+  btn.textContent = '✅ Copied'
+  setTimeout(() => btn.textContent = '📋 Copy', 2000)
+}
+
+function downloadYaml() {
+  const name = (state.oasFile?.name || 'oas').replace(/\.(json|yaml|yml)$/, '_enhanced.yaml')
+  const a    = document.createElement('a')
+  a.href     = URL.createObjectURL(new Blob([_finalYaml || ''], { type:'text/yaml' }))
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function escJs(str) {
+  return String(str||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+}
+
+// ── Progress persistence ───────────────────────────────────────────
+const STORAGE_KEY = 'oas_enhancer_progress'
+
+let _saveIndicatorTimer = null
+function _flashSaved() {
+  const el = document.getElementById('save-indicator')
+  el.style.opacity = '1'
+  clearTimeout(_saveIndicatorTimer)
+  _saveIndicatorTimer = setTimeout(() => el.style.opacity = '0', 1500)
+}
+
+function saveProgress() {
+  if (!state.suggestions.length) return
+  try {
+    const snapshot = {
+      savedAt:      new Date().toISOString(),
+      specFileName: state.oasFile?.name || 'unknown',
+      spec:         state.spec,
+      originalYaml: state.originalYaml,
+      suggestions:  state.suggestions,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    _flashSaved()
+  } catch(e) {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+function clearProgress() {
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+function checkSavedSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return
+    const snap = JSON.parse(raw)
+    if (!snap.suggestions || !snap.suggestions.length) return
+
+    const accepted = snap.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length
+    const pending  = snap.suggestions.filter(s => s.status === 'pending').length
+    const total    = snap.suggestions.length
+    const when     = new Date(snap.savedAt).toLocaleString()
+
+    const banner = document.getElementById('resume-banner')
+    document.getElementById('resume-banner-sub').textContent =
+      `"${snap.specFileName}" · ${total} suggestions · ${accepted} accepted · ${pending} pending · saved ${when}`
+    banner.style.display = 'block'
+  } catch(e) { /* corrupt data */ }
+}
+
+function resumeSession() {
+  try {
+    const snap = JSON.parse(localStorage.getItem(STORAGE_KEY))
+    state.spec         = snap.spec
+    state.originalYaml = snap.originalYaml
+    state.suggestions  = snap.suggestions
+    document.getElementById('resume-banner').style.display = 'none'
+    renderReview()
+    showPhase('review')
+  } catch(e) {
+    alert('Could not restore session.')
+  }
+}
+
+function discardSession() {
+  clearProgress()
+  document.getElementById('resume-banner').style.display = 'none'
+}
+
+// Check on page load
+checkSavedSession()
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "info": {
+    "name": "User Management API",
+    "_postman_id": "test-collection-001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create User",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/users" },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"secret123\",\n  \"role\": \"admin\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\"\n}"
+        }
+      },
+      "response": [
+        {
+          "name": "201 Created",
+          "status": "Created",
+          "code": 201,
+          "body": "{\n  \"id\": \"usr_abc123\",\n  \"email\": \"john@example.com\",\n  \"role\": \"admin\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"emailVerified\": false\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get User",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/users/usr_abc123" }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"id\": \"usr_abc123\",\n  \"email\": \"john@example.com\",\n  \"status\": \"active\",\n  \"role\": \"admin\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"createdAt\": \"2024-01-15T10:30:00Z\",\n  \"lastLoginAt\": \"2024-01-20T08:00:00Z\",\n  \"emailVerified\": true\n}"
+        }
+      ]
+    }
+  ]
+}
