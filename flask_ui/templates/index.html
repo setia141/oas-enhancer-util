@@ -1,166 +1,154 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OAS Enhancer</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+{% extends "base.html" %}
 
-    /* Header */
-    #app-header { background:#fff; border-bottom:1px solid #e8eaed; padding:0 24px; display:flex; align-items:center; height:52px; position:sticky; top:0; z-index:200; }
-    #app-header .logo { font-size:18px; margin-right:8px; }
-    #app-header .title { font-weight:700; font-size:15px; }
+{% block title %}OAS Enhancer{% endblock %}
 
-    /* Centered page wrapper (upload + loading) */
-    .page-center { display:flex; justify-content:center; padding:40px 16px; }
+{% block styles %}
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* Upload card */
-    .upload-card { width:100%; max-width:540px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
-    .card-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:24px; color:#fff; }
-    .card-header h1 { font-size:18px; font-weight:700; }
-    .card-header p  { font-size:13px; opacity:.9; margin-top:4px; }
-    .card-body { padding:24px; }
-    .field { margin-bottom:16px; }
-    .field label { display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:8px; }
-    .field label .opt { font-weight:400; color:#888; }
-    .field label .req { color:#e53935; }
-    .dropzone { border:2px dashed #d0d5dd; border-radius:12px; padding:20px 16px; text-align:center; cursor:pointer; background:#fafafa; transition:all .2s; }
-    .dropzone:hover, .dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
-    .dropzone.has-file { border-color:#34a853; background:#e6f4ea; }
-    .dropzone .dz-icon  { font-size:26px; margin-bottom:6px; }
-    .dropzone .dz-label { font-weight:600; font-size:14px; color:#333; }
-    .dropzone .dz-hint  { font-size:12px; color:#888; margin-top:2px; }
-    .remove-btn  { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
-    .file-warn   { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
-    .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
-    .submit-btn  { width:100%; padding:12px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
-    .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
+  /* Centered page wrapper (upload + loading) */
+  .page-center { display:flex; justify-content:center; padding:40px 16px; }
 
-    /* Progress */
-    .progress-card { width:100%; max-width:440px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
-    .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
-    .progress-header h2 { font-weight:700; font-size:17px; }
-    .progress-header p  { font-size:13px; opacity:.9; margin-top:4px; }
-    .progress-body { padding:32px 24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
-    .spinner { width:44px; height:44px; border:4px solid #e8eaed; border-top-color:#4285f4; border-radius:50%; animation:spin .8s linear infinite; }
-    @keyframes spin { to { transform:rotate(360deg) } }
-    .progress-status { font-size:14px; color:#555; }
-    .progress-timer  { font-size:13px; color:#999; }
+  /* Upload card */
+  .upload-card { width:100%; max-width:540px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
+  .card-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:24px; color:#fff; }
+  .card-header h1 { font-size:18px; font-weight:700; }
+  .card-header p  { font-size:13px; opacity:.9; margin-top:4px; }
+  .card-body { padding:24px; }
+  .field { margin-bottom:16px; }
+  .field label { display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:8px; }
+  .field label .opt { font-weight:400; color:#888; }
+  .field label .req { color:#e53935; }
+  .dropzone { border:2px dashed #d0d5dd; border-radius:12px; padding:20px 16px; text-align:center; cursor:pointer; background:#fafafa; transition:all .2s; }
+  .dropzone:hover, .dropzone.drag { border-color:#4285f4; background:#e8f0fe; }
+  .dropzone.has-file { border-color:#34a853; background:#e6f4ea; }
+  .dropzone .dz-icon  { font-size:26px; margin-bottom:6px; }
+  .dropzone .dz-label { font-weight:600; font-size:14px; color:#333; }
+  .dropzone .dz-hint  { font-size:12px; color:#888; margin-top:2px; }
+  .remove-btn  { margin-top:6px; font-size:11px; color:#888; background:none; border:none; cursor:pointer; padding:0; }
+  .file-warn   { margin-top:6px; font-size:12px; padding:6px 10px; border-radius:6px; display:none; }
+  .file-warn.error { background:#fce8e6; color:#c5221f; border:1px solid #f5c6c3; }
+  .submit-btn  { width:100%; padding:12px; background:#4285f4; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .submit-btn:disabled { background:#ccc; cursor:not-allowed; }
 
-    /* ── Review ── */
-    .review-page { max-width:900px; margin:0 auto; padding:16px; }
+  /* Progress */
+  .progress-card { width:100%; max-width:440px; background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,.1); overflow:hidden; }
+  .progress-header { background:linear-gradient(135deg,#4285f4,#34a853); padding:20px 24px; color:#fff; }
+  .progress-header h2 { font-weight:700; font-size:17px; }
+  .progress-header p  { font-size:13px; opacity:.9; margin-top:4px; }
+  .progress-body { padding:32px 24px; display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .spinner { width:44px; height:44px; border:4px solid #e8eaed; border-top-color:#4285f4; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg) } }
+  .progress-status { font-size:14px; color:#555; }
+  .progress-timer  { font-size:13px; color:#999; }
 
-    /* Sticky toolbar */
-    .review-toolbar {
-      background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.1);
-      padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-      margin-bottom:16px; position:sticky; top:52px; z-index:100;
-    }
-    .review-toolbar h2 { font-size:14px; font-weight:700; flex:1; min-width:100px; }
-    .tbar-stat  { font-size:12px; color:#666; white-space:nowrap; }
-    .tbar-btn   { padding:6px 12px; font-size:12px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; white-space:nowrap; }
-    .tbar-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; font-weight:600; }
+  /* ── Review ── */
+  .review-page { max-width:900px; margin:0 auto; padding:16px; }
 
-    /* Endpoint group */
-    .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:12px; overflow:hidden; }
-    .endpoint-header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:#f8f9fa; border-bottom:1px solid #e8eaed; flex-wrap:wrap; gap:8px; }
-    .method-badge { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; flex-shrink:0; }
-    .endpoint-path { font-size:13px; font-family:monospace; font-weight:600; flex:1; min-width:0; word-break:break-all; }
-    .group-stats { font-size:11px; color:#999; white-space:nowrap; }
-    .group-actions { display:flex; gap:6px; flex-shrink:0; }
-    .group-btn { padding:3px 10px; font-size:11px; border-radius:6px; border:1px solid; background:#fff; cursor:pointer; font-family:inherit; }
-    .group-btn.accept-all { color:#34a853; border-color:#34a853; }
-    .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
+  /* Sticky toolbar — adjust top value to match your base.html header height */
+  .review-toolbar {
+    background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.1);
+    padding:10px 16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    margin-bottom:16px; position:sticky; top:0; z-index:100;
+  }
+  .review-toolbar h2 { font-size:14px; font-weight:700; flex:1; min-width:100px; }
+  .tbar-stat  { font-size:12px; color:#666; white-space:nowrap; }
+  .tbar-btn   { padding:6px 12px; font-size:12px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .tbar-btn.primary { background:#4285f4; color:#fff; border-color:#4285f4; font-weight:600; }
 
-    /* Suggestion row */
-    .suggestion-row { border-bottom:1px solid #f0f0f0; }
-    .suggestion-row:last-child { border-bottom:none; }
-    .sugg-card { padding:12px 16px; border-left:3px solid transparent; transition:background .15s; }
-    .suggestion-row.accepted .sugg-card { border-left-color:#34a853; background:#f6fef8; }
-    .suggestion-row.rejected .sugg-card { border-left-color:#ea4335; opacity:.5; }
-    .suggestion-row.edited   .sugg-card { border-left-color:#f4a234; background:#fffdf5; }
+  /* Endpoint group */
+  .endpoint-group { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:12px; overflow:hidden; }
+  .endpoint-header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:#f8f9fa; border-bottom:1px solid #e8eaed; flex-wrap:wrap; gap:8px; }
+  .method-badge { padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; color:#fff; text-transform:uppercase; min-width:52px; text-align:center; flex-shrink:0; }
+  .endpoint-path { font-size:13px; font-family:monospace; font-weight:600; flex:1; min-width:0; word-break:break-all; }
+  .group-stats { font-size:11px; color:#999; white-space:nowrap; }
+  .group-actions { display:flex; gap:6px; flex-shrink:0; }
+  .group-btn { padding:3px 10px; font-size:11px; border-radius:6px; border:1px solid; background:#fff; cursor:pointer; font-family:inherit; }
+  .group-btn.accept-all { color:#34a853; border-color:#34a853; }
+  .group-btn.reject-all { color:#ea4335; border-color:#ea4335; }
 
-    .sugg-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
-    .sugg-field-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
-    .sugg-field-badge.description     { background:#e8f0fe; color:#1a73e8; }
-    .sugg-field-badge.example         { background:#e6f4ea; color:#34a853; }
-    .sugg-field-badge.x-ai            { background:#f3e8fd; color:#9334e6; }
-    .sugg-field-badge.schema_property { background:#fff3e0; color:#e65100; }
-    .sugg-location { font-size:11px; font-family:monospace; color:#888; word-break:break-all; }
+  /* Suggestion row */
+  .suggestion-row { border-bottom:1px solid #f0f0f0; }
+  .suggestion-row:last-child { border-bottom:none; }
+  .sugg-card { padding:12px 16px; border-left:3px solid transparent; transition:background .15s; }
+  .suggestion-row.accepted .sugg-card { border-left-color:#34a853; background:#f6fef8; }
+  .suggestion-row.rejected .sugg-card { border-left-color:#ea4335; opacity:.5; }
+  .suggestion-row.edited   .sugg-card { border-left-color:#f4a234; background:#fffdf5; }
 
-    .sugg-body { display:flex; align-items:flex-start; gap:12px; }
-    .sugg-main { flex:1; min-width:0; }
-    .sugg-value  { font-size:13px; color:#222; line-height:1.5; word-break:break-word; }
-    .sugg-reason { font-size:11px; color:#aaa; margin-top:3px; }
-    .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #f4a234; border-radius:6px; resize:vertical; min-height:44px; }
+  .sugg-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+  .sugg-field-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; text-transform:uppercase; flex-shrink:0; }
+  .sugg-field-badge.description     { background:#e8f0fe; color:#1a73e8; }
+  .sugg-field-badge.example         { background:#e6f4ea; color:#34a853; }
+  .sugg-field-badge.x-ai            { background:#f3e8fd; color:#9334e6; }
+  .sugg-field-badge.schema_property { background:#fff3e0; color:#e65100; }
+  .sugg-location { font-size:11px; font-family:monospace; color:#888; word-break:break-all; }
 
-    /* Inline YAML context */
-    .ctx-toggle { font-size:11px; color:#4285f4; background:none; border:none; cursor:pointer; padding:0; margin-top:6px; display:inline-block; }
-    .ctx-block  { margin-top:6px; background:#1e1e2e; border-radius:6px; overflow:auto; max-height:180px; padding:10px 12px; }
-    .ctx-line   { display:block; font-family:monospace; font-size:11px; line-height:1.6; white-space:pre; color:#cdd6f4; }
-    .ctx-line.ctx-inserted { color:#6ee7a0; background:rgba(52,168,83,.2); }
+  .sugg-body { display:flex; align-items:flex-start; gap:12px; }
+  .sugg-main { flex:1; min-width:0; }
+  .sugg-value  { font-size:13px; color:#222; line-height:1.5; word-break:break-word; }
+  .sugg-reason { font-size:11px; color:#aaa; margin-top:3px; }
+  .sugg-edit-area { margin-top:6px; width:100%; font-size:13px; font-family:inherit; padding:6px 8px; border:1px solid #f4a234; border-radius:6px; resize:vertical; min-height:44px; }
 
-    /* Action buttons */
-    .sugg-actions { display:flex; flex-direction:column; gap:5px; flex-shrink:0; padding-top:2px; }
-    .sugg-btn { padding:5px 12px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; background:#fff; min-width:76px; text-align:center; }
-    .sugg-btn.accept { color:#34a853; border-color:#34a853; }
-    .sugg-btn.accept.active { background:#34a853; color:#fff; }
-    .sugg-btn.edit   { color:#f4a234; border-color:#f4a234; }
-    .sugg-btn.edit.active   { background:#f4a234; color:#fff; }
-    .sugg-btn.reject { color:#ea4335; border-color:#ea4335; }
-    .sugg-btn.reject.active { background:#ea4335; color:#fff; }
+  /* Inline YAML context */
+  .ctx-toggle { font-size:11px; color:#4285f4; background:none; border:none; cursor:pointer; padding:0; margin-top:6px; display:inline-block; }
+  .ctx-block  { margin-top:6px; background:#1e1e2e; border-radius:6px; overflow:auto; max-height:180px; padding:10px 12px; }
+  .ctx-line   { display:block; font-family:monospace; font-size:11px; line-height:1.6; white-space:pre; color:#cdd6f4; }
+  .ctx-line.ctx-inserted { color:#6ee7a0; background:rgba(52,168,83,.2); }
 
-    /* ── Done ── */
-    .done-page { max-width:1000px; margin:0 auto; padding:16px; }
-    .done-header-bar { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); padding:12px 20px; display:flex; align-items:center; gap:12px; margin-bottom:0; flex-wrap:wrap; border-radius:12px 12px 0 0; border-bottom:1px solid #e8eaed; }
-    .done-title { font-size:15px; font-weight:700; color:#1a7340; flex:1; }
-    .done-meta  { font-size:13px; color:#666; }
-    .done-btn   { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; }
-    .done-btn.primary { background:#34a853; color:#fff; border-color:#34a853; font-weight:600; }
-    .done-tabs  { display:flex; background:#fff; border-bottom:2px solid #e8eaed; }
-    .done-tab   { padding:9px 20px; font-size:13px; font-weight:600; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; font-family:inherit; color:#666; }
-    .done-tab.active { color:#4285f4; border-bottom-color:#4285f4; }
-    .done-body  { background:#1e1e2e; border-radius:0 0 12px 12px; overflow:auto; max-height:calc(100vh - 220px); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  /* Action buttons */
+  .sugg-actions { display:flex; flex-direction:column; gap:5px; flex-shrink:0; padding-top:2px; }
+  .sugg-btn { padding:5px 12px; font-size:12px; border-radius:6px; border:1px solid; cursor:pointer; font-family:inherit; white-space:nowrap; background:#fff; min-width:76px; text-align:center; }
+  .sugg-btn.accept { color:#34a853; border-color:#34a853; }
+  .sugg-btn.accept.active { background:#34a853; color:#fff; }
+  .sugg-btn.edit   { color:#f4a234; border-color:#f4a234; }
+  .sugg-btn.edit.active   { background:#f4a234; color:#fff; }
+  .sugg-btn.reject { color:#ea4335; border-color:#ea4335; }
+  .sugg-btn.reject.active { background:#ea4335; color:#fff; }
 
-    /* Unified diff */
-    .diff-unified { padding:12px 0; }
-    .diff-line { display:flex; font-family:monospace; font-size:12px; line-height:1.65; }
-    .diff-line .dl-gutter { width:28px; flex-shrink:0; text-align:center; color:#555; user-select:none; border-right:1px solid #2a2a3e; padding-right:4px; }
-    .diff-line .dl-text   { flex:1; padding:0 12px; white-space:pre-wrap; word-break:break-all; color:#cdd6f4; }
-    .diff-line.dl-add    .dl-gutter { color:#6ee7a0; background:rgba(52,168,83,.12); }
-    .diff-line.dl-add    .dl-text   { background:rgba(52,168,83,.1); color:#6ee7a0; }
-    .diff-line.dl-remove .dl-gutter { color:#ff8a80; background:rgba(229,57,53,.12); }
-    .diff-line.dl-remove .dl-text   { background:rgba(229,57,53,.1); color:#ff8a80; }
+  /* ── Done ── */
+  .done-page { max-width:1000px; margin:0 auto; padding:16px; }
+  .done-header-bar { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); padding:12px 20px; display:flex; align-items:center; gap:12px; margin-bottom:0; flex-wrap:wrap; border-radius:12px 12px 0 0; border-bottom:1px solid #e8eaed; }
+  .done-title { font-size:15px; font-weight:700; color:#1a7340; flex:1; }
+  .done-meta  { font-size:13px; color:#666; }
+  .done-btn   { padding:7px 14px; font-size:13px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer; font-family:inherit; }
+  .done-btn.primary { background:#34a853; color:#fff; border-color:#34a853; font-weight:600; }
+  .done-tabs  { display:flex; background:#fff; border-bottom:2px solid #e8eaed; }
+  .done-tab   { padding:9px 20px; font-size:13px; font-weight:600; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; font-family:inherit; color:#666; }
+  .done-tab.active { color:#4285f4; border-bottom-color:#4285f4; }
+  .done-body  { background:#1e1e2e; border-radius:0 0 12px 12px; overflow:auto; max-height:calc(100vh - 220px); box-shadow:0 2px 8px rgba(0,0,0,.08); }
 
-    .done-yaml-pre { margin:0; padding:16px 20px; font-size:12px; line-height:1.7; color:#cdd6f4; font-family:monospace; white-space:pre-wrap; word-break:break-all; }
+  /* Unified diff */
+  .diff-unified { padding:12px 0; }
+  .diff-line { display:flex; font-family:monospace; font-size:12px; line-height:1.65; }
+  .diff-line .dl-gutter { width:28px; flex-shrink:0; text-align:center; color:#555; user-select:none; border-right:1px solid #2a2a3e; padding-right:4px; }
+  .diff-line .dl-text   { flex:1; padding:0 12px; white-space:pre-wrap; word-break:break-all; color:#cdd6f4; }
+  .diff-line.dl-add    .dl-gutter { color:#6ee7a0; background:rgba(52,168,83,.12); }
+  .diff-line.dl-add    .dl-text   { background:rgba(52,168,83,.1); color:#6ee7a0; }
+  .diff-line.dl-remove .dl-gutter { color:#ff8a80; background:rgba(229,57,53,.12); }
+  .diff-line.dl-remove .dl-text   { background:rgba(229,57,53,.1); color:#ff8a80; }
 
-    /* Resume banner */
-    .resume-banner { display:none; margin-bottom:16px; background:#e8f0fe; border:1px solid #c5d8fc; border-radius:10px; padding:12px 14px; }
-    .resume-banner-title { font-size:13px; font-weight:600; color:#1a56db; margin-bottom:2px; }
-    .resume-banner-sub   { font-size:12px; color:#555; margin-bottom:10px; }
-    .resume-banner-btns  { display:flex; gap:8px; }
-    .resume-btn          { padding:6px 14px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; font-weight:600; }
-    .resume-btn.primary  { background:#4285f4; color:#fff; }
-    .resume-btn.secondary{ background:#fff; color:#666; border:1px solid #ddd; }
+  .done-yaml-pre { margin:0; padding:16px 20px; font-size:12px; line-height:1.7; color:#cdd6f4; font-family:monospace; white-space:pre-wrap; word-break:break-all; }
 
-    /* Save indicator */
-    #save-indicator { position:fixed; bottom:16px; right:16px; background:#222; color:#fff; font-size:12px; padding:6px 12px; border-radius:8px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999; }
+  /* Resume banner */
+  .resume-banner { display:none; margin-bottom:16px; background:#e8f0fe; border:1px solid #c5d8fc; border-radius:10px; padding:12px 14px; }
+  .resume-banner-title { font-size:13px; font-weight:600; color:#1a56db; margin-bottom:2px; }
+  .resume-banner-sub   { font-size:12px; color:#555; margin-bottom:10px; }
+  .resume-banner-btns  { display:flex; gap:8px; }
+  .resume-btn          { padding:6px 14px; font-size:12px; border-radius:7px; border:none; cursor:pointer; font-family:inherit; font-weight:600; }
+  .resume-btn.primary  { background:#4285f4; color:#fff; }
+  .resume-btn.secondary{ background:#fff; color:#666; border:1px solid #ddd; }
 
-    /* Error */
-    .error-box { max-width:540px; margin:0 auto; padding:40px 16px; }
-    .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
-    .retry-btn  { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
-  </style>
-</head>
-<body>
+  /* Save indicator */
+  #save-indicator { position:fixed; bottom:16px; right:16px; background:#222; color:#fff; font-size:12px; padding:6px 12px; border-radius:8px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999; }
 
-<header id="app-header">
-  <div class="logo">📄</div>
-  <div class="title">OAS Enhancer</div>
-</header>
+  /* Error */
+  .error-box { max-width:540px; margin:0 auto; padding:40px 16px; }
+  .error-msg  { padding:16px; background:#fce8e6; color:#c5221f; border-radius:8px; font-size:13px; margin-bottom:12px; }
+  .retry-btn  { padding:10px 20px; background:#4285f4; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-family:inherit; }
+</style>
+{% endblock %}
 
+{% block content %}
 <!-- IDLE -->
 <div id="phase-idle" class="page-center">
   <div class="upload-card">
@@ -276,7 +264,10 @@
   <div class="error-msg" id="error-msg"></div>
   <button class="retry-btn" onclick="resetAll()">Try Again</button>
 </div>
+{% endblock %}
 
+{% block scripts %}
+{{ super() }}
 <script>
 // ── State ──────────────────────────────────────────────────────────
 let state = {
@@ -378,7 +369,7 @@ async function handleSubmit() {
   if (document.getElementById('force-refresh').checked) form.append('force_refresh', 'true')
 
   try {
-    const resp = await fetch('/suggest', { method:'POST', body:form })
+    const resp = await fetch('/oas-enhancer/suggest', { method:'POST', body:form })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
       throw new Error(err.detail || `Server error ${resp.status}`)
@@ -421,7 +412,6 @@ function handleEvent(event) {
     clearInterval(_timerInterval)
     state.spec         = event.spec
     state.originalYaml = event.original_yaml
-    // Deduplicate by path+method+location
     const seen = new Set()
     state.suggestions = event.suggestions
       .filter(s => {
@@ -445,13 +435,11 @@ const METHOD_COLORS = {
 
 function renderReview() {
   updateToolbar()
-  // Safety: ensure apply button is never stuck in disabled state
   const applyBtn = document.getElementById('apply-btn')
   if (applyBtn) applyBtn.disabled = false
   const body = document.getElementById('review-body')
   body.innerHTML = ''
 
-  // Group by method+path
   const groups = {}
   state.suggestions.forEach((s, idx) => {
     const key = s.method === 'component' ? `component::${s.path}` : `${s.method}::${s.path}`
@@ -482,7 +470,7 @@ function renderReview() {
 
     const rowsEl = document.getElementById('rows-' + safeId)
     group.items.forEach(item => rowsEl.appendChild(buildSuggRow(item.idx)))
-    updateGroupStats(group.items[0].idx)  // init stats label
+    updateGroupStats(group.items[0].idx)
   }
 }
 
@@ -498,7 +486,6 @@ function buildSuggRow(idx) {
     ? JSON.stringify(displayVal, null, 2)
     : String(displayVal ?? '')
 
-  // Inline YAML context block
   let ctxHtml = ''
   const ctx = s.yaml_context
   if (ctx && ctx.context_lines && ctx.context_lines.length) {
@@ -583,7 +570,6 @@ function toggleEdit(idx) {
 
 function updateEdit(idx, val) {
   state.suggestions[idx].editedValue = val
-  // Update the value display in real-time so the user sees the change immediately
   const valueDiv = document.querySelector('#sugg-row-' + idx + ' .sugg-value')
   if (valueDiv) valueDiv.textContent = val
   saveProgress()
@@ -636,9 +622,7 @@ async function applyAccepted() {
   const accepted = state.suggestions
     .filter(s => ['accepted','edited'].includes(s.status))
     .map(s => {
-      // editedValue always wins if the user touched the textarea, regardless of current status
       let value = s.editedValue !== undefined ? s.editedValue : s.value
-      // parse JSON strings back to objects for fields that expect objects
       if ((s.field === 'schema_property' || s.field === 'x-ai') && typeof value === 'string') {
         try { value = JSON.parse(value) } catch { /* keep as string */ }
       }
@@ -655,7 +639,7 @@ async function applyAccepted() {
   applyBtn.disabled    = true
 
   try {
-    const resp = await fetch('/apply', {
+    const resp = await fetch('/oas-enhancer/apply', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ spec: state.spec, accepted }),
@@ -702,15 +686,9 @@ function _lcs(a, b) {
 }
 
 function diffLines(a, b) {
-  const CHUNK = 400   // lines per chunk — keeps memory bounded on large specs
+  const CHUNK = 400
   const m = a.length, n = b.length
-
-  // For small specs run LCS directly
   if (m <= CHUNK && n <= CHUNK) return _lcs(a, b)
-
-  // For large specs: split both into chunks by index ratio and diff each chunk.
-  // This is approximate (may miss cross-chunk moves) but is correct for the
-  // common case where suggestions add lines near their insertion point.
   const res = []
   const ratio = n / (m || 1)
   let ai = 0, bi = 0
@@ -732,10 +710,8 @@ function renderDone(data, appliedCount) {
   _finalYaml    = data.spec_yaml     || ''
   _originalYaml = data.original_yaml || ''
 
-  // Enhanced YAML tab
   document.getElementById('done-yaml-content').textContent = _finalYaml
 
-  // Unified diff — build HTML
   const diff = diffLines(_originalYaml.split('\n'), _finalYaml.split('\n'))
   let html = ''
   diff.forEach(d => {
@@ -747,7 +723,6 @@ function renderDone(data, appliedCount) {
 }
 
 function backToReview() {
-  // Re-enable apply button in case it was disabled
   const btn = document.getElementById('apply-btn')
   btn.disabled    = false
   btn.textContent = `Apply ${state.suggestions.filter(s => ['accepted','edited'].includes(s.status)).length} →`
@@ -802,9 +777,7 @@ function saveProgress() {
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
     _flashSaved()
-  } catch(e) {
-    // localStorage full or unavailable — silently ignore
-  }
+  } catch(e) { /* localStorage full or unavailable */ }
 }
 
 function clearProgress() {
@@ -849,8 +822,6 @@ function discardSession() {
   document.getElementById('resume-banner').style.display = 'none'
 }
 
-// Check on page load
 checkSavedSession()
 </script>
-</body>
-</html>
+{% endblock %}
