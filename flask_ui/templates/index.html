@@ -391,8 +391,16 @@ async function handleSubmit() {
 
 // ── SSE events ─────────────────────────────────────────────────────
 function handleEvent(event) {
+  if (event.type === 'scan_complete') {
+    document.getElementById('progress-status').textContent =
+      `Found ${event.total_gaps} gaps across ${event.total_batches} batch${event.total_batches > 1 ? 'es' : ''} — estimated ~${event.estimated_minutes} min`
+    return
+  }
   if (event.type === 'heartbeat') {
-    document.getElementById('progress-status').textContent = 'Still reviewing — almost there...'
+    const cur = document.getElementById('progress-status').textContent
+    if (!cur.startsWith('Found')) {
+      document.getElementById('progress-status').textContent = 'Still reviewing — almost there...'
+    }
     return
   }
   if (event.type === 'error') {

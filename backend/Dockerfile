@@ -10,8 +10,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 
-# Create runtime directories — logs and cache are mounted as volumes in prod
-RUN mkdir -p logs .cache
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r -g 1001 appuser && useradd -r -u 1001 -g appuser appuser && update-ca-certificates
+
+RUN pip install --upgrade pip && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 

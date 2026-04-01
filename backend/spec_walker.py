@@ -131,9 +131,14 @@ def walk(spec: dict, rules: WalkRules) -> list[Gap]:
         else:
             logger.debug("OK  info.description")
 
+    _HEALTH_PATHS = {"/health", "/healthz", "/healthcheck", "/health-check", "/ping", "/status", "/live", "/ready", "/liveness", "/readiness"}
+
     # Paths
     for path, path_item in paths.items():
         if not isinstance(path_item, dict):
+            continue
+        if path.rstrip("/").lower() in _HEALTH_PATHS:
+            _skip("health check endpoint", path)
             continue
         for method in ("get", "post", "put", "patch", "delete", "head", "options"):
             operation = path_item.get(method)

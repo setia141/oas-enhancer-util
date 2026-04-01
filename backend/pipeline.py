@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import time
@@ -364,9 +365,7 @@ async def _run_postman(spec: dict, postman_text: str) -> list[dict]:
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
-async def _run_suggester(oas_spec: dict, postman_text: str | None, has_postman: bool) -> list[dict]:
-    gaps = walk(oas_spec, WALK_RULES)
-
+async def _run_suggester(oas_spec: dict, postman_text: str | None, has_postman: bool, gaps: list[Gap]) -> list[dict]:
     if not gaps and not has_postman:
         logger.info("Walker found no gaps and no Postman collection — spec is complete")
         return []
@@ -428,8 +427,15 @@ async def get_suggestions(
             yield {"type": "done", "suggestions": cached, "spec": oas_spec, "original_yaml": _to_yaml(oas_spec), "from_cache": True}
             return
 
+    gaps = walk(oas_spec, WALK_RULES)
+    if gaps:
+        total_batches     = math.ceil(len(gaps) / BATCH_SIZE)
+        parallel_rounds   = math.ceil(total_batches / MAX_CONCURRENT)
+        estimated_minutes = max(1, parallel_rounds)   # ~60s per round, MAX_CONCURRENT batches in parallel
+        yield {"type": "scan_complete", "total_gaps": len(gaps), "total_batches": total_batches, "estimated_minutes": estimated_minutes}
+
     suggestions = None
-    async for item in _await_with_heartbeat(_run_suggester(oas_spec, postman_text, has_postman), "suggester"):
+    async for item in _await_with_heartbeat(_run_suggester(oas_spec, postman_text, has_postman, gaps), "suggester"):
         if isinstance(item, dict) and item.get("type") == "heartbeat":
             yield item
         else:

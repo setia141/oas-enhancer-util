@@ -37,7 +37,8 @@
       "Bash(backend/Scripts/python.exe -m pip show python-dotenv fastapi)",
       "Bash(backend/Scripts/python.exe -c \"import sys; sys.path.insert\\(0, ''.''\\); from backend.server import app; print\\(''OK''\\)\")",
       "Bash(backend/Scripts/python.exe -c \"import sys; print\\(sys.path\\)\")",
-      "Bash(backend/Scripts/python.exe -m pip list)"
+      "Bash(backend/Scripts/python.exe -m pip list)",
+      "Bash(find C:Usersdeepa -name IMG_0631*)"
     ]
   }
 }
