@@ -37,13 +37,11 @@ backend:
   # Persistent storage for logs and cache
   persistence:
     logs:
-      enabled: true
-      size: 1Gi
-      storageClass: ""   # leave empty to use cluster default
+      enabled: false     # logs use emptyDir — no PVC needed
     cache:
       enabled: true
       size: 2Gi
-      storageClass: ""
+      storageClass: "azurefile-csi"   # Azure Files supports ReadWriteMany for zero-downtime deployments
 
 ui:
   image: oas-enhancer-ui

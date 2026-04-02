@@ -60,20 +60,15 @@ spec:
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           volumeMounts:
-            {{- if .Values.backend.persistence.logs.enabled }}
             - name: logs
               mountPath: /app/src/logs
-            {{- end }}
             {{- if .Values.backend.persistence.cache.enabled }}
             - name: cache
               mountPath: /app/.cache
             {{- end }}
       volumes:
-        {{- if .Values.backend.persistence.logs.enabled }}
         - name: logs
-          persistentVolumeClaim:
-            claimName: {{ include "oas-enhancer.fullname" . }}-logs
-        {{- end }}
+          emptyDir: {}
         {{- if .Values.backend.persistence.cache.enabled }}
         - name: cache
           persistentVolumeClaim:
