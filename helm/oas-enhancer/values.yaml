@@ -35,13 +35,18 @@ backend:
   openaiApiKey: ""     # only used if existingSecret is empty
 
   # Persistent storage for logs and cache
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+
   persistence:
     logs:
       enabled: false     # logs use emptyDir — no PVC needed
     cache:
       enabled: true
       size: 2Gi
-      storageClass: "azurefile-csi"   # Azure Files supports ReadWriteMany for zero-downtime deployments
+      storageClass: ""
 
 ui:
   image: oas-enhancer-ui

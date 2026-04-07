@@ -8,6 +8,8 @@ metadata:
     {{- include "oas-enhancer.backend.selectorLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.backend.replicas }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "oas-enhancer.backend.selectorLabels" . | nindent 6 }}
@@ -18,9 +20,9 @@ spec:
         {{- include "oas-enhancer.backend.selectorLabels" . | nindent 8 }}
     spec:
       securityContext:
-        fsGroup: 1001
-        runAsUser: 1001
-        runAsGroup: 1001
+        fsGroup: {{ .Values.backend.securityContext.fsGroup }}
+        runAsUser: {{ .Values.backend.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.backend.securityContext.runAsGroup }}
       containers:
         - name: backend
           image: {{ include "oas-enhancer.backend.image" . }}

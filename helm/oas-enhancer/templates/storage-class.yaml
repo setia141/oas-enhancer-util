@@ -1,0 +1,20 @@
+{{- if .Values.backend.persistence.cache.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ include "oas-enhancer.fullname" . }}-azurefile
+provisioner: file.csi.azure.com
+parameters:
+  skuName: Standard_LRS
+mountOptions:
+  - dir_mode=0777
+  - file_mode=0777
+  - uid={{ .Values.backend.securityContext.runAsUser }}
+  - gid={{ .Values.backend.securityContext.fsGroup }}
+  - mfsymlinks
+  - nobrl
+  - cache=strict
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+{{- end }}
